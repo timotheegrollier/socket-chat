@@ -32,7 +32,7 @@ ORIGIN=https://socket-tchat.onrender.com SOCKET_URL=https://react-socket-chat.si
 npx wrangler deploy
 ```
 
-Worker URL (current): `https://react-socket-chat.sitizstorm.workers.dev`
+Worker URL (current): `https://socket-chat.sitizstorm.workers.dev`
 
 ## Frontend
 
