@@ -2,6 +2,10 @@ name = "socket-chat"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"
 
+[assets]
+directory = "../client/build"
+binding = "ASSETS"
+
 [[durable_objects.bindings]]
 name = "TCHAT"
 class_name = "ChatRoom"

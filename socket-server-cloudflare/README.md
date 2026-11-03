@@ -29,12 +29,16 @@ ORIGIN=https://socket-tchat.onrender.com SOCKET_URL=https://react-socket-chat.si
 ## Deploy
 
 ```bash
-npx wrangler deploy
+cd client && npm install && npm run build
+cd ../socket-server-cloudflare && npx wrangler deploy
 ```
 
 Worker URL (current): `https://socket-chat.sitizstorm.workers.dev`
 
 ## Frontend
 
-Update the client socket URL (see `client/src/config.json`) to the deployed
-Worker URL and use `transports: ['websocket']`.
+The Worker also serves the React SPA (see `client/build`) through the Cloudflare
+Workers `ASSETS` binding. The client socket URL (see `client/src/config.json`) is
+the deployed Worker URL and the client uses `transports: ['websocket']`. The
+GitHub Pages deployment workflow has been removed; the frontend is served by the
+Cloudflare Worker.

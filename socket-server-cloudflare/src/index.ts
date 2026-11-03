@@ -1,5 +1,8 @@
 export interface Env {
   TCHAT: DurableObjectNamespace;
+  ASSETS: {
+    fetch: typeof fetch;
+  };
 }
 
 type BinaryAttachment = ArrayBuffer | ArrayBufferView;
@@ -28,9 +31,12 @@ const MAX_NAME_LENGTH = 64;
 // The chat frontend origin and local development origins. Add any custom
 // frontend domain here before deploying it.
 const ALLOWED_ORIGINS = new Set([
+  'https://socket-chat.sitizstorm.workers.dev',
   'https://socket-tchat.onrender.com',
+  'http://localhost:8787',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://127.0.0.1:8787',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
 ]);
@@ -71,9 +77,12 @@ export default {
       return env.TCHAT.get(id).fetch(request);
     }
 
-    return new Response('ReactSocketChat socket server is running.\n', {
-      headers: { 'content-type': 'text/plain' },
-    });
+    const assetResponse = await env.ASSETS.fetch(request);
+    if (assetResponse.status === 404) {
+      // SPA fallback: unknown client-side routes serve the React app shell.
+      return env.ASSETS.fetch(new URL('/index.html', request.url).toString());
+    }
+    return assetResponse;
   },
 };
 
