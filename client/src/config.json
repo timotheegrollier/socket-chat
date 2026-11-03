@@ -1,3 +1,4 @@
 {
-    "api_url":"https://socket-tchat.onrender.com"
+    "api_url":"https://socket-tchat.onrender.com",
+    "socket_url":"https://react-socket-chat.sitizstorm.workers.dev"
 }

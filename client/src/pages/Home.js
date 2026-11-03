@@ -37,7 +37,9 @@ const Home = () => {
 
 
         if (connected) {
-            socketRef.current = socketIOClient()
+            socketRef.current = socketIOClient(config.socket_url, {
+                transports: ['websocket'],
+            })
             socketRef.current.on("newMsg", () => {
                 fetchMessages()
             })
