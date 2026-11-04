@@ -221,6 +221,7 @@ export class ChatRoom {
       this.sendRaw(client, '40' + JSON.stringify({ sid: client.id }));
       this.userCount += 1;
       this.broadcastToAll('count', this.userCount);
+      this.broadcastPresence();
       return;
     }
 
@@ -252,6 +253,11 @@ export class ChatRoom {
 
     const eventName = args[0];
     const payload = args[1];
+
+    if (eventName === 'join') {
+      this.handleJoin(client, payload);
+      return;
+    }
 
     if (eventName === 'join-room') {
       this.handleJoinRoom(client, payload);
@@ -340,6 +346,27 @@ export class ChatRoom {
       ...(payload as Record<string, unknown>),
       caller: client.id,
     });
+  }
+
+  private handleJoin(client: Client, payload: unknown): void {
+    let name = '';
+    if (typeof payload === 'string') {
+      name = payload.trim().slice(0, MAX_NAME_LENGTH);
+    } else if (payload && typeof payload === 'object') {
+      const raw = (payload as { name?: unknown }).name;
+      if (typeof raw === 'string') {
+        name = raw.trim().slice(0, MAX_NAME_LENGTH);
+      }
+    }
+    client.name = name || 'Anonymous';
+    this.broadcastPresence();
+  }
+
+  private broadcastPresence(): void {
+    const users = Array.from(this.sockets.values())
+      .filter((client) => !client.closed)
+      .map((client) => ({ id: client.id, name: client.name ?? 'Anonymous' }));
+    this.broadcastToAll('presence', users);
   }
 
   private handleTyping(
@@ -471,6 +498,7 @@ export class ChatRoom {
     this.sockets.delete(client.id);
     this.userCount = Math.max(0, this.userCount - 1);
     this.broadcastToAll('count', this.userCount);
+    this.broadcastPresence();
     this.stopPingTimerIfIdle();
   }
 

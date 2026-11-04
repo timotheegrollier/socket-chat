@@ -17,6 +17,23 @@ function waitFor(socket, event, timeout = 10_000) {
   });
 }
 
+function waitForPresence(socket, predicate, timeout = 10_000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off('presence', handler);
+      reject(new Error('timeout waiting for matching presence'));
+    }, timeout);
+    function handler(users) {
+      if (predicate(users)) {
+        clearTimeout(timer);
+        socket.off('presence', handler);
+        resolve(users);
+      }
+    }
+    socket.on('presence', handler);
+  });
+}
+
 function makeSocket() {
   const socket = io(URL, {
     transports: ['websocket'],
@@ -49,6 +66,11 @@ async function main() {
   if (firstCount[0] !== 1) throw new Error(`alice expected first count 1, got ${firstCount[0]}`);
   console.log('count ok');
 
+  const aliceJoined = waitForPresence(alice, (users) =>
+    Array.isArray(users) && users.some((user) => user.name === 'alice'));
+  alice.emit('join', 'alice');
+  await aliceJoined;
+
   const newMsgPromise = waitFor(alice, 'newMsg');
   alice.emit('newMsg', {});
   const [newMsg] = await newMsgPromise;
@@ -65,6 +87,14 @@ async function main() {
   const secondCount = await waitFor(bob, 'count');
   if (secondCount[0] !== 2) throw new Error(`bob expected count 2, got ${secondCount[0]}`);
   console.log('count x2 ok');
+
+  bob.emit('join', 'bob');
+  const users = await waitForPresence(alice, (list) =>
+    Array.isArray(list) &&
+    list.length === 2 &&
+    list.some((user) => user.name === 'alice') &&
+    list.some((user) => user.name === 'bob'));
+  console.log('presence ok');
 
   const typingPromise = waitFor(bob, 'typing');
   alice.emit('typing', 'alice');

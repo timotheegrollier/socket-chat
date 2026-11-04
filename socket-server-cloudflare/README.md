@@ -23,10 +23,13 @@ Engine.IO v4 / Socket.IO v4 framing:
 
 - `0{...}` open, `40` namespace connect, `2`/`3` ping/pong (server-pings),
   `42["event", payload]` events, `45<n>-...` binary events.
-- Client → server events: `newMsg`, `resetTchat`, `typing`, `stopTyping`,
+- Client → server events: `join`, `newMsg`, `resetTchat`, `typing`, `stopTyping`,
   `join-room`, `offer`, `answer`, `ice-candidate`, `relay-data`.
-- Server → client events: `count`, `newMsg`, `reset`, `refreshCount`, `typing`,
-  `stopTyping`, `room-users`, `user-joined`, `user-left`, `relay-data`.
+- Server → client events: `count`, `presence`, `newMsg`, `reset`,
+  `refreshCount`, `typing`, `stopTyping`, `room-users`, `user-joined`,
+  `user-left`, `relay-data`.
+- `join` stores the pseudo (max 12 chars) and broadcasts `presence` as an array
+  of `{ id, name }`; the list is refreshed on connect and disconnect too.
 - `typing` is broadcast to everyone except the sender; its payload accepts
   either a string or `{ name }`.
 
