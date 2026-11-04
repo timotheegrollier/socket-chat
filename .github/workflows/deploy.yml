@@ -1,0 +1,65 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy-cloudflare
+    runs-on: ubuntu-latest
+    env:
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      API_URL: ${{ vars.API_URL || 'https://socket-tchat.onrender.com' }}
+      SOCKET_URL: ${{ vars.SOCKET_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Build client
+        working-directory: client
+        run: |
+          npm ci
+          node -e "const fs=require('fs');fs.writeFileSync('src/config.json', JSON.stringify({api_url: process.env.API_URL, socket_url: process.env.SOCKET_URL}))"
+          npm run build
+
+      - name: Warn when Cloudflare credentials are missing
+        if: env.CF_API_TOKEN == ''
+        run: |
+          echo "::warning title=Cloudflare deploy skipped::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in Settings -> Secrets and variables -> Actions, then re-run this workflow."
+
+      - name: Deploy worker + assets to Cloudflare
+        if: env.CF_API_TOKEN != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: socket-server-cloudflare
+          wranglerVersion: '4.156.2'
+          command: deploy
+
+      - name: Smoke test production
+        if: env.CF_API_TOKEN != ''
+        run: |
+          for attempt in $(seq 1 20); do
+            if curl -fsS https://socket-chat.sitizstorm.workers.dev/health; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Production health check failed"
+          exit 1

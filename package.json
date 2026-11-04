@@ -1,7 +1,7 @@
 {
-  "name": "reactchat",
-  "version": "1.0.0",
-  "description": "",
+  "name": "socket-chat",
+  "version": "2.0.0",
+  "description": "Real-time Socket.IO chat — React frontend, Express/MongoDB API and a Cloudflare Workers realtime layer",
   "main": "server.js",
   "scripts": {
     "heroku-postbuild": "npm run install-client && npm run build",

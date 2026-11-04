@@ -77,22 +77,22 @@ textarea {
     resize: none !important;
 }
 
-#messageForm {
-    width: 90%;
-    display: flex;
-    justify-content: center;
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    input[type="text"] {
-        width: 90%;
-        padding: 10px !important;
-    }
-    input[type="submit"] {
-        margin-left: 10px !important;
-    }
+#Home {
+    height: 100%;
 
+    #loginComponent {
+        height: 80%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+        form {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            height: 50%;
+        }
+    }
 }
 
  @media screen and (max-width:580px) {

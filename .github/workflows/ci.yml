@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  client:
+    name: client
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate runtime config
+        env:
+          API_URL: ${{ vars.API_URL || 'https://socket-tchat.onrender.com' }}
+          SOCKET_URL: ${{ vars.SOCKET_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
+        run: |
+          node -e "const fs=require('fs');fs.writeFileSync('src/config.json', JSON.stringify({api_url: process.env.API_URL, socket_url: process.env.SOCKET_URL}))"
+
+      - name: Unit tests
+        run: CI=true npm test -- --watchAll=false
+
+      - name: Production build
+        run: npm run build
+
+  worker:
+    name: worker
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: socket-server-cloudflare
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: socket-server-cloudflare/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Prepare static assets placeholder
+        run: |
+          mkdir -p ../client/build
+          echo '<!doctype html><html><body>CI assets placeholder</body></html>' > ../client/build/index.html
+
+      - name: Start local worker
+        run: |
+          npx wrangler dev --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/wrangler.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8787/health > /dev/null 2>&1; then
+              echo "Worker is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Worker failed to start:"
+          cat "$RUNNER_TEMP/wrangler.log"
+          exit 1
+
+      - name: Protocol tests
+        run: SOCKET_URL=http://127.0.0.1:8787 npm run test:protocol

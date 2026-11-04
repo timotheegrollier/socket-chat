@@ -61,6 +61,23 @@ async function main() {
   if (!reset) throw new Error('reset payload mismatch');
   console.log('reset ok');
 
+  const bob = await makeSocket();
+  const secondCount = await waitFor(bob, 'count');
+  if (secondCount[0] !== 2) throw new Error(`bob expected count 2, got ${secondCount[0]}`);
+  console.log('count x2 ok');
+
+  const typingPromise = waitFor(bob, 'typing');
+  alice.emit('typing', 'alice');
+  const [typing] = await typingPromise;
+  if (!typing || typing.name !== 'alice') throw new Error('typing payload mismatch');
+  console.log('typing ok');
+
+  const stopTypingPromise = waitFor(bob, 'stopTyping');
+  alice.emit('stopTyping', {});
+  await stopTypingPromise;
+  console.log('stopTyping ok');
+
+  bob.disconnect();
   alice.disconnect();
   console.log('ALL OK');
 }

@@ -2,6 +2,9 @@ name = "socket-chat"
 main = "src/index.ts"
 compatibility_date = "2026-11-01"
 
+[vars]
+VERSION = "2.0.0"
+
 [assets]
 directory = "../client/build"
 binding = "ASSETS"

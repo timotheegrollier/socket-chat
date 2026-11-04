@@ -70,6 +70,15 @@ io.on("connection", (socket) => {
         io.emit('newMsg')
     })
 
+    socket.on('typing', (name) => {
+        const clean = typeof name === 'string' ? name.slice(0, 12) : ''
+        socket.broadcast.emit('typing', { name: clean })
+    })
+
+    socket.on('stopTyping', () => {
+        socket.broadcast.emit('stopTyping')
+    })
+
     socket.on('resetTchat', () => {
         io.emit('reset')
     })
