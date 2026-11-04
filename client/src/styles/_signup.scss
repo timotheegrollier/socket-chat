@@ -1,21 +1,222 @@
-#signup {
-    height: 70vh;
-    form {
-        margin-top: 20px !important;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: space-around;
-        height: 90%;
-    }
-    input[type=email],input[type=password],input[type=text]{
-        width: 80%;
-    }
-input[type="checkbox"]{
-    margin-left: 20px !important;
+/* ============ auth (login + signup) ============ */
+
+.auth-screen {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 16px;
 }
 
-.checkterms{
-    margin-bottom: 50px !important;
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 30px 28px;
+    box-shadow: var(--shadow-lg);
+    animation: fade-in 0.2s ease;
 }
+
+.auth-head {
+    text-align: center;
+    margin-bottom: 24px;
+
+    h1 {
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    p {
+        margin-top: 6px;
+        font-size: 13.5px;
+        color: var(--muted);
+    }
+}
+
+.auth-logo {
+    width: 46px;
+    height: 46px;
+    margin: 0 auto 14px;
+    border-radius: 12px;
+    background: url('./images/icon-chat.png') center / cover;
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 0 0 5px rgba(91, 124, 250, 0.08);
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.field-hint {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 11.5px;
+}
+
+.input {
+    width: 100%;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+
+    &::placeholder {
+        color: var(--muted);
+    }
+
+    &:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+}
+
+.field-password {
+    position: relative;
+
+    .input {
+        padding-right: 58px;
+    }
+}
+
+.field-eye {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 6px;
+    border-radius: 6px;
+
+    &:hover {
+        color: var(--text);
+        background: var(--surface-2);
+    }
+}
+
+.btn-accent {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.15s, transform 0.1s;
+
+    &:hover:not(:disabled) {
+        background: var(--accent-strong);
+    }
+
+    &:active:not(:disabled) {
+        transform: translateY(1px);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+}
+
+.btn-spinner {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    animation: spin 0.8s linear infinite;
+}
+
+.form-error {
+    color: var(--danger);
+    font-size: 12.5px;
+    text-align: center;
+}
+
+.form-success {
+    color: var(--success);
+    font-size: 12.5px;
+    text-align: center;
+}
+
+.auth-alt {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+
+    a {
+        color: var(--accent-strong);
+        font-weight: 600;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+}
+
+.checkterms {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+
+    input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+        cursor: pointer;
+    }
+}
+
+#loginComponent,
+#signup {
+    width: 100%;
+}
+
+#loginComponent {
+    display: flex;
+    justify-content: center;
+}
+
+#signup {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+@media screen and (max-width: 480px) {
+    .auth-card {
+        padding: 24px 20px;
+    }
 }

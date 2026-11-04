@@ -33,6 +33,16 @@ const NEW_IN_V2 = [
         text: 'A built-in emoji picker next to the composer to react faster than you can type.',
     },
     {
+        icon: '🟢',
+        title: 'Online presence',
+        text: 'A live sidebar lists everyone connected under their pseudo — you can see who is in #general at a glance.',
+    },
+    {
+        icon: '🧹',
+        title: 'Message tools',
+        text: 'Copy any message, delete your own, search the whole conversation and group consecutive messages by author.',
+    },
+    {
         icon: '📐',
         title: 'Rebuilt layout',
         text: 'A real chat window: sticky composer, bubbles with avatars, status header and a smart scroll — open history without being yanked to the bottom, then jump back with one click.',

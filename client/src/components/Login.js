@@ -1,64 +1,109 @@
 import axios from 'axios';
 import React, { Component } from 'react';
 import { Link } from 'react-router-dom';
-
-
-const config = require('../config.json')
+import config from '../config.json';
 
 
 export default class Login extends Component {
-    constructor(props){
+    constructor(props) {
         super(props);
         this.state = {
-            loginError:"",
+            loginError: "",
+            submitting: false,
+            showPassword: false,
         }
         this.login = this.login.bind(this)
         this.getLogged = this.props.getLogged
     }
+
     login(e) {
         e.preventDefault()
         const userCredentials = {
             pseudo: document.getElementById('pseudo').value,
             password: document.getElementById('password').value
         }
+        this.setState({ submitting: true, loginError: "" })
         axios.post(config.api_url + '/api/secure/login', userCredentials).then((res) => {
-            this.storeUser(res.data.token,res.data.userId).then(()=>{
+            this.storeUser(res.data.token, res.data.userId).then(() => {
+                this.setState({ submitting: false })
                 this.getLogged(true)
             })
-
         }).catch(res => {
-                this.setState({loginError: res.response ? res.response.data.error : 'Unable to reach the server !'})
+            this.setState({
+                submitting: false,
+                loginError: res.response ? res.response.data.error : 'Unable to reach the server!'
             })
+        })
     }
 
-   async storeUser (token,userId){
+    async storeUser(token, userId) {
         const userConnected = {
             token: token,
             userId: userId,
-           expiry: new Date().getTime() + 86400000
+            expiry: new Date().getTime() + 86400000
         }
         localStorage.setItem('JWT', JSON.stringify(userConnected))
     }
-    render() {
-        return (
 
-            <div id='loginComponent'>
-                <h3>Login</h3>
-                <p className='col-10 text-center text-muted mt-3 mb-2 h6'>Hey welcome bro !<br />You need to login for access tchat </p>
-                <form className='col-10 col-md-6' action="" onSubmit={this.login}>
-                    <label className='text-center h6' htmlFor="pseudo">Pseudo :</label>
-                    <input id='pseudo' type="text" name="pseudo" className='form-control' />
-                    <label className='text-center h6' htmlFor="password">Password :</label>
-                    <input id='password'  type="password" name="password" className='form-control' />
-                    <div className="d-flex justify-content-center">
-                    <button type="submit" className='btn btn-success col-6 col-sm-3 mt-3'>Login</button>
+    render() {
+        const { loginError, submitting, showPassword } = this.state
+
+        return (
+            <div id="loginComponent">
+                <div className="auth-card">
+                    <div className="auth-head">
+                        <div className="auth-logo" aria-hidden="true"></div>
+                        <h1>Welcome back</h1>
+                        <p>Log in to join the conversation.</p>
                     </div>
-                </form>
-                {this.state.loginError && (
-                    <p className='text-danger text-center'>{this.state.loginError}</p>
-                )}
-                <p className='mt-3'>Haven't got an account yet ? </p>
-                <Link to="/register">Register now !</Link>
+
+                    <form className="auth-form" onSubmit={this.login}>
+                        <label className="field" htmlFor="pseudo">
+                            Username
+                            <input
+                                id="pseudo"
+                                type="text"
+                                name="pseudo"
+                                className="input"
+                                autoComplete="username"
+                                autoFocus
+                                required
+                            />
+                        </label>
+
+                        <label className="field" htmlFor="password">
+                            Password
+                            <div className="field-password">
+                                <input
+                                    id="password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    name="password"
+                                    className="input"
+                                    autoComplete="current-password"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="field-eye"
+                                    onClick={() => this.setState({ showPassword: !showPassword })}
+                                >
+                                    {showPassword ? 'Hide' : 'Show'}
+                                </button>
+                            </div>
+                        </label>
+
+                        {loginError && <p className="form-error">{loginError}</p>}
+
+                        <button type="submit" className="btn-accent" disabled={submitting}>
+                            {submitting && <span className="btn-spinner" aria-hidden="true"></span>}
+                            {submitting ? 'Logging in…' : 'Log in'}
+                        </button>
+                    </form>
+
+                    <p className="auth-alt">
+                        No account yet? <Link to="/register">Create one</Link>
+                    </p>
+                </div>
             </div>
         )
     }

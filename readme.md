@@ -19,15 +19,19 @@ and a cloud-native realtime layer.
 | Real-time messages | Socket.IO protocol over a WebSocket connection, no polling |
 | Author & timestamps | Every message carries its author (pseudo), author id and creation date |
 | Typing indicator | `typing` / `stopTyping` events broadcast to everyone else in the room |
+| Online presence | A live sidebar lists everyone connected under their pseudo (`join` + `presence` events) |
 | Online counter | The Durable Object tracks connected clients and broadcasts `count` |
 | Unread badge | The tab title shows `(N) new message(s)` while the page is hidden |
-| Own-message styling | Your messages are highlighted on the right, others on the left |
+| Message tools | Copy any message, delete your own (`DELETE /api/messages/:id`), local search across the conversation |
+| Conversation timeline | Consecutive messages from the same author are grouped (5 min window) with day separators |
 | Smart scrolling | New messages do not yank the view while you read history; a "New messages" pill jumps back |
+| Multi-line composer | Auto-growing textarea — Enter sends, Shift+Enter adds a new line |
 | Emoji picker | Quick reactions appended to the composer |
+| Toasts | Lightweight feedback for copy, delete, reset and connection errors |
 | Input limits | 500 characters max, live counter, validated on client **and** server |
 | Auth | Signup / login with bcrypt + JWT (24 h), stored in `localStorage` |
 | Chat reset | `/delete` command clears all messages for every connected client |
-| Responsive layout | Glass-morphism chat window, sticky composer, mobile safe layout |
+| Responsive layout | Dark, Discord/Linear-style shell: presence sidebar, channel column, sticky composer, mobile drawer |
 
 ---
 
@@ -179,6 +183,7 @@ events:
 
 | Event | Payload | Server behaviour |
 | --- | --- | --- |
+| `join` | `name: string` or `{ name }` | Registers the pseudo and broadcasts the updated `presence` list |
 | `newMsg` | — | Broadcasts `newMsg` to everyone |
 | `resetTchat` | — | Broadcasts `reset` to everyone |
 | `typing` | `name: string` | Broadcasts `typing` `{ name }` to everyone **except the sender** |
@@ -187,8 +192,11 @@ events:
 | `offer` / `answer` / `ice-candidate` | `{ target, ... }` | Targeted signalling relay |
 | `relay-data` | `{ target, data, meta }` | Targeted relay (text or binary) |
 
-Server → client: `count`, `newMsg`, `reset`, `refreshCount`, `typing`,
+Server → client: `count`, `presence`, `newMsg`, `reset`, `refreshCount`, `typing`,
 `stopTyping`, `room-users`, `user-joined`, `user-left`, `relay-data`.
+
+`presence` is an array of `{ id, name }`, recalculated on connect, `join` and
+disconnect.
 
 `GET /health` returns:
 
@@ -207,6 +215,7 @@ Server → client: `count`, `newMsg`, `reset`, `refreshCount`, `typing`,
 | `GET` | `/api/secure/:id` | Returns the user (pseudo) |
 | `GET` | `/api/messages` | List all messages (`message`, `author`, `authorId`, `createdAt`) |
 | `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId }` |
+| `DELETE` | `/api/messages/:id` | Delete a message — `{ authorId }` must match the message owner |
 | `DELETE` | `/api/messages` | Delete all messages (chat reset) |
 
 ---
@@ -230,7 +239,8 @@ SOCKET_URL=http://127.0.0.1:8787 npm run test:protocol
 ```
 
 The protocol suite covers the health endpoint, connection count, `newMsg`,
-`reset`, the typing indicator between two clients, and `stopTyping`.
+`reset`, the presence list (`join` / `presence`), the typing indicator between
+two clients, and `stopTyping`.
 
 ---
 

@@ -7,7 +7,7 @@ React 17 single-page application (Create React App) for
 
 | Route | Page | Purpose |
 | --- | --- | --- |
-| `/` | `Home` | Login gate + chat window (messages, typing, online count, emoji picker) |
+| `/` | `Home` | Login gate + chat shell (presence sidebar, timeline, search, composer, toasts) |
 | `/about` | `About` | Version 2.0 presentation, architecture, roadmap |
 | `/register` | `Signup` | Account creation |
 
@@ -39,15 +39,19 @@ is displayed on the About page and in the chat header. Bump the version in
 
 ## Styling
 
-SCSS sources live in `src/styles/` (`_general.scss`, `_tchat.scss`,
+SCSS sources live in `src/styles/` (`_theme.scss`, `_general.scss`, `_tchat.scss`,
 `_about.scss`, `_signup.scss`, `_loading_dots.scss`). Dart Sass is used through
-the `sass` package. The app relies on Bootstrap 5 for utility classes and on
-custom SCSS for the chat and About layouts.
+the `sass` package. `_theme.scss` is the single source of truth for the design
+tokens (colors, radii, typography); Bootstrap 5 is imported before the custom
+styles so the project theme always wins.
 
 ## Notes
 
-- The socket connects as soon as a valid JWT is found in `localStorage`, and
-  sending is blocked behind a loader until the socket is ready.
+- The socket connects as soon as a valid JWT is found in `localStorage`, sends
+  `join` with the pseudo once ready, and listens for `presence` to render the
+  online sidebar.
 - Message sending is a REST `POST /api/messages/new` followed by a socket
   `newMsg` broadcast, so every client refetches the conversation.
+- Own messages can be removed with `DELETE /api/messages/:id`; the client then
+  re-broadcasts `newMsg` so other clients refresh.
 - See the root README for the full architecture, API and CI/CD documentation.

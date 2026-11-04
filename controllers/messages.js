@@ -1,4 +1,3 @@
-const io = require('socket.io-client');
 const Message = require('../models/chatMessage')
 
 
@@ -26,17 +25,25 @@ exports.getMessages = (req, res, next) => {
 
 exports.deleteMessages = (req, res) => {
     Message.deleteMany()
-    .then(()=>{
-        res.status(200).json({ msg: "Tchat supprimé !" }); //http://localhost:3100
-        const socketClient = io.connect('http://socket-tchat.tk');
-         // For socket reset tchat //for heroku https://socket-tchat.herokuapp.com/
-        socketClient.on('connect', () => {
-            socketClient.emit('resetTchat');
-            setTimeout(()=>{
-                socketClient.disconnect()
-            },200)
-        });
+        .then(() => {
+            res.status(200).json({ msg: "Tchat supprimé !" });
+        })
+        .catch((error) => res.status(400).json({ error }))
+}
 
-    })
-    .catch((error) => res.status(400).json({ error }))
+exports.deleteMessage = (req, res) => {
+    const authorId = typeof req.body.authorId === 'string' ? req.body.authorId : '';
+
+    Message.findById(req.params.id)
+        .then((message) => {
+            if (!message) {
+                return res.status(404).json({ error: 'Message introuvable' });
+            }
+            if (message.authorId && message.authorId !== authorId) {
+                return res.status(403).json({ error: 'Action non autorisée' });
+            }
+            return message.deleteOne()
+                .then(() => res.status(200).json({ msg: 'Message supprimé !' }));
+        })
+        .catch((error) => res.status(400).json({ error }))
 }

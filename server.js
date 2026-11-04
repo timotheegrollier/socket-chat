@@ -50,17 +50,31 @@ const sslServer = https.createServer({key: fs.readFileSync('./privkey.pem'),    
 // SOCKET
 var io = require('socket.io')(server);
 let userCount = 0
+const presence = new Map()
+
+const broadcastPresence = () => {
+    io.emit('presence', Array.from(presence, ([id, name]) => ({ id, name })))
+}
 
 
 io.on("connection", (socket) => {
     console.log("Client connected");
     userCount++
+    presence.set(socket.id, 'Anonymous')
     io.emit("count", userCount)
+    broadcastPresence()
     socket.on("disconnect", () => {
         console.log("Client disconnected");
         userCount--
+        presence.delete(socket.id)
         io.emit("count", userCount)
+        broadcastPresence()
 
+    });
+    socket.on('join', (name) => {
+        const clean = typeof name === 'string' ? name.trim().slice(0, 12) : ''
+        presence.set(socket.id, clean || 'Anonymous')
+        broadcastPresence()
     });
     socket.on('npmStop', () => {
         process.exit(0);
