@@ -1,4 +1,298 @@
-1. Creer un .env avec "DBUSER,PORT,SSL_PORT"
-2. Modifier le fichier /client/src/config.json pour configurer l'url exact du serveur avec le bon port et le bon protocol
-3. npm install && npm install-client && npm run build
-4. Pour le dev il est possible de lancer le serveur react "cd client && npm start" mais il faut également modifier le proxy dans le fichier /client/package.json pour rediriger les requetes websocket vers le port du serveur websocket (HTTP)
+# Socket Chat
+
+[![CI](https://github.com/timotheegrollier/socket-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/ci.yml)
+[![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
+
+A real-time chat application built as a learning project around WebSockets.
+Version **2.0.0** turns the original proof of concept into a usable chat:
+identified messages, typing indicator, unread notifications, a rebuilt interface
+and a cloud-native realtime layer.
+
+**Live:** https://socket-chat.sitizstorm.workers.dev
+
+---
+
+## Features
+
+| Feature | Description |
+| --- | --- |
+| Real-time messages | Socket.IO protocol over a WebSocket connection, no polling |
+| Author & timestamps | Every message carries its author (pseudo), author id and creation date |
+| Typing indicator | `typing` / `stopTyping` events broadcast to everyone else in the room |
+| Online counter | The Durable Object tracks connected clients and broadcasts `count` |
+| Unread badge | The tab title shows `(N) new message(s)` while the page is hidden |
+| Own-message styling | Your messages are highlighted on the right, others on the left |
+| Smart scrolling | New messages do not yank the view while you read history; a "New messages" pill jumps back |
+| Emoji picker | Quick reactions appended to the composer |
+| Input limits | 500 characters max, live counter, validated on client **and** server |
+| Auth | Signup / login with bcrypt + JWT (24 h), stored in `localStorage` |
+| Chat reset | `/delete` command clears all messages for every connected client |
+| Responsive layout | Glass-morphism chat window, sticky composer, mobile safe layout |
+
+---
+
+## Architecture
+
+```
+                    ┌──────────────────────────────┐
+                    │        React SPA (v2.0)      │
+                    │  React 17 · Router · SCSS    │
+                    └──────────────┬───────────────┘
+                                   │
+                 ┌─────────────────┴──────────────────┐
+                 │                                    │
+        HTTPS (REST API)                 WebSocket /socket.io
+                 │                                    │
+                 ▼                                    ▼
+     ┌───────────────────────┐          ┌──────────────────────────────┐
+     │  Node.js / Express    │          │  Cloudflare Worker           │
+     │  Render               │          │  ├─ ASSETS → client/build    │
+     │  └─ MongoDB Atlas     │          │  └─ Durable Object ChatRoom  │
+     │     users + messages  │          │     (in-memory socket state) │
+     └───────────────────────┘          └──────────────────────────────┘
+```
+
+- The **Worker** serves the React production build through the `ASSETS` binding
+  and routes `/socket.io/*` upgrades to a single **Durable Object** (`ChatRoom`),
+  which implements the Engine.IO / Socket.IO protocol subset used by the client.
+- The **REST API** (Node.js / Express + MongoDB) runs on **Render**. It handles
+  authentication and message persistence; the socket layer only notifies clients
+  so they refetch through the API.
+- **Cloudflare** hosts the edge layer. Render redeploys the API on every push to
+  `master`; GitHub Actions deploys the Worker and static assets after merge.
+
+---
+
+## Tech stack
+
+- **Frontend:** React 17 (Create React App), React Router 6, SCSS, Bootstrap 5,
+  socket.io-client, Axios
+- **Realtime:** Cloudflare Workers + Durable Objects (TypeScript), a custom
+  implementation of the Socket.IO packet format (Engine.IO v4)
+- **API:** Node.js, Express, Mongoose, MongoDB Atlas, bcrypt, JWT
+- **Tooling:** GitHub Actions (CI/CD), Wrangler 4, node:test-style protocol
+  scripts, Testing Library
+
+---
+
+## Repository layout
+
+```
+.
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml              # tests + build on every PR and push to master
+│   │   └── deploy.yml          # build + deploy to Cloudflare on master
+│   ├── ISSUE_TEMPLATE/
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── CONTRIBUTING.md
+├── client/                     # React application
+│   ├── public/
+│   └── src/
+│       ├── components/         # Nav, Login
+│       ├── pages/              # Home (chat), About, Signup
+│       └── styles/             # SCSS (chat, about, general, signup)
+├── controllers/                # Express controllers (messages, users)
+├── middleware/                 # auth, multer
+├── models/                     # Mongoose schemas (chatMessage, tchatUser)
+├── routes/                     # Express routers
+├── app.js                      # Express app
+├── server.js                   # HTTP/HTTPS + Socket.IO dev server
+└── socket-server-cloudflare/   # Cloudflare Worker + Durable Object
+    ├── src/index.ts
+    ├── test/protocol.test.js
+    └── wrangler.toml
+```
+
+---
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 20+
+- A MongoDB Atlas connection string (or a local MongoDB)
+- Wrangler (installed locally in `socket-server-cloudflare`)
+
+### 1. Install
+
+```bash
+npm install
+cd client && npm install && cd ..
+cd socket-server-cloudflare && npm install && cd ..
+```
+
+### 2. Configure the API
+
+Create a `.env` at the repository root:
+
+```dotenv
+DBUSER=<mongo-atlas-user>
+PORT=3001
+SSL_PORT=3002
+```
+
+> `app.js` builds the Mongo connection string from `DBUSER`.
+> `server.js` also starts an HTTPS server and therefore expects `privkey.pem` /
+> `cert.pem` at the repository root. For plain HTTP development, comment the
+> `sslServer` lines in `server.js`.
+
+### 3. Configure the client
+
+`client/src/config.json` is ignored by git (environment-specific). Copy the
+template and adjust the URLs:
+
+```bash
+cp client/src/config.example.json client/src/config.json
+```
+
+```json
+{
+    "api_url": "https://socket-tchat.onrender.com",
+    "socket_url": "https://socket-chat.sitizstorm.workers.dev"
+}
+```
+
+For purely local development, use `http://localhost:3001` for both entries (or
+keep the existing CRA `proxy` setting and leave `api_url` empty).
+
+### 4. Run
+
+```bash
+# Production-like: Express serves client/build
+npm run build
+npm start                # http://localhost:3001
+
+# Or, hot-reload frontend against the local API
+npm run client           # http://localhost:3000
+
+# Local realtime worker (instead of the deployed one)
+cd socket-server-cloudflare && npx wrangler dev --port 8787
+```
+
+---
+
+## Socket protocol (Worker)
+
+The client connects with `transports: ['websocket']`. Supported client → server
+events:
+
+| Event | Payload | Server behaviour |
+| --- | --- | --- |
+| `newMsg` | — | Broadcasts `newMsg` to everyone |
+| `resetTchat` | — | Broadcasts `reset` to everyone |
+| `typing` | `name: string` | Broadcasts `typing` `{ name }` to everyone **except the sender** |
+| `stopTyping` | — | Broadcasts `stopTyping` to everyone except the sender |
+| `join-room` | `{ roomId, name }` | Joins a WebRTC signalling room |
+| `offer` / `answer` / `ice-candidate` | `{ target, ... }` | Targeted signalling relay |
+| `relay-data` | `{ target, data, meta }` | Targeted relay (text or binary) |
+
+Server → client: `count`, `newMsg`, `reset`, `refreshCount`, `typing`,
+`stopTyping`, `room-users`, `user-joined`, `user-left`, `relay-data`.
+
+`GET /health` returns:
+
+```json
+{ "status": "ok", "version": "2.0.0", "timestamp": "..." }
+```
+
+---
+
+## REST API
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `POST` | `/api/secure/signup` | Create an account (pseudo, password, confirmPass, terms) |
+| `POST` | `/api/secure/login` | Returns `{ userId, token }` (JWT, 24 h) |
+| `GET` | `/api/secure/:id` | Returns the user (pseudo) |
+| `GET` | `/api/messages` | List all messages (`message`, `author`, `authorId`, `createdAt`) |
+| `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId }` |
+| `DELETE` | `/api/messages` | Delete all messages (chat reset) |
+
+---
+
+## Tests
+
+Automated tests run on every pull request and every push to `master`:
+
+```bash
+# Client unit tests (Testing Library + Jest via react-scripts)
+cd client
+CI=true npm test -- --watchAll=false
+
+# Worker typecheck
+cd socket-server-cloudflare
+npm run typecheck
+
+# Worker protocol tests — requires a local worker on :8787
+npx wrangler dev --port 8787 &
+SOCKET_URL=http://127.0.0.1:8787 npm run test:protocol
+```
+
+The protocol suite covers the health endpoint, connection count, `newMsg`,
+`reset`, the typing indicator between two clients, and `stopTyping`.
+
+---
+
+## CI / CD and branch protection
+
+- **`master` is protected**: direct pushes are blocked, force pushes and branch
+  deletion are disabled, and every change must go through a pull request.
+- The **CI** workflow (`ci.yml`) runs on pull requests and on `master`:
+  - `client`: install, generate `config.json` from repository variables, unit
+    tests, production build.
+  - `worker`: install, TypeScript typecheck, start `wrangler dev`, protocol tests.
+- A pull request can only be merged when both checks are green.
+- Merging to `master` triggers **Deploy** (`deploy.yml`), which rebuilds the
+  client, deploys the Worker + `client/build` assets to Cloudflare with
+  `cloudflare/wrangler-action`, then smoke-tests `/health`.
+
+### Required repository configuration
+
+| Type | Name | Value |
+| --- | --- | --- |
+| Secret | `CLOUDFLARE_API_TOKEN` | API token with *Workers Scripts: Edit* permission |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id |
+| Variable (optional) | `API_URL` | Overrides the REST API URL baked into the client |
+| Variable (optional) | `SOCKET_URL` | Overrides the socket URL baked into the client |
+
+If the Cloudflare secrets are missing, the deploy job is skipped with a warning
+annotation instead of failing the pipeline.
+
+### Release flow
+
+1. Create a branch, commit your changes and open a pull request against `master`.
+2. Wait for CI to pass; request a review or self-merge (no approval required).
+3. Squash-merge the pull request.
+4. The Deploy workflow deploys to Cloudflare automatically.
+
+---
+
+## Versioning
+
+The current version is **2.0.0**. It is displayed on the About page and in the
+chat header. When bumping the version:
+
+1. Update the version in `package.json`, `client/package.json` and
+   `socket-server-cloudflare/package.json` (the client build injects
+   `client/package.json` → `REACT_APP_VERSION` at build time).
+2. Update `VERSION` in `socket-server-cloudflare/wrangler.toml` (exposed by
+   `/health`).
+3. Refresh lockfiles with `npm install --package-lock-only` in each workspace.
+
+---
+
+## Roadmap
+
+- Image attachments (upload + preview)
+- Multiple rooms and private conversations
+- Peer-to-peer file transfer over WebRTC (signalling already exists)
+- Native browser notifications
+- Light / dark theme toggle
+
+---
+
+## License
+
+Training project — no production license. Do not reuse the authentication
+secret (`RANDOM_TOKEN_SECRET`) or the committed development certificates as-is.

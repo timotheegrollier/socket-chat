@@ -1,70 +1,53 @@
-# Getting Started with Create React App
+# Socket Chat — Client
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React 17 single-page application (Create React App) for
+[Socket Chat](https://github.com/timotheegrollier/socket-chat).
 
-## Available Scripts
+## Pages
 
-In the project directory, you can run:
+| Route | Page | Purpose |
+| --- | --- | --- |
+| `/` | `Home` | Login gate + chat window (messages, typing, online count, emoji picker) |
+| `/about` | `About` | Version 2.0 presentation, architecture, roadmap |
+| `/register` | `Signup` | Account creation |
 
-### `npm start`
+## Configuration
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+`src/config.json` is ignored by git. Create it from the template:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```bash
+cp src/config.example.json src/config.json
+```
 
-### `npm test`
+| Key | Description |
+| --- | --- |
+| `api_url` | Base URL of the Express/MongoDB API |
+| `socket_url` | URL of the Cloudflare Worker socket endpoint |
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Scripts
 
-### `npm run build`
+```bash
+npm start        # dev server on :3000
+npm test         # interactive Jest / Testing Library
+CI=true npm test -- --watchAll=false   # one-shot (used by CI)
+npm run build    # production build in build/
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+The `build` script injects the package version into `REACT_APP_VERSION`, which
+is displayed on the About page and in the chat header. Bump the version in
+`package.json` to update both.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Styling
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+SCSS sources live in `src/styles/` (`_general.scss`, `_tchat.scss`,
+`_about.scss`, `_signup.scss`, `_loading_dots.scss`). Dart Sass is used through
+the `sass` package. The app relies on Bootstrap 5 for utility classes and on
+custom SCSS for the chat and About layouts.
 
-### `npm run eject`
+## Notes
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- The socket connects as soon as a valid JWT is found in `localStorage`, and
+  sending is blocked behind a loader until the socket is ready.
+- Message sending is a REST `POST /api/messages/new` followed by a socket
+  `newMsg` broadcast, so every client refetches the conversation.
+- See the root README for the full architecture, API and CI/CD documentation.

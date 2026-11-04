@@ -4,7 +4,15 @@ const Message = require('../models/chatMessage')
 
 
 exports.newMessage = (req, res, next) => {
-    let newMessage = new Message({ ...req.body })
+    const message = typeof req.body.message === 'string' ? req.body.message.trim().slice(0, 500) : '';
+    if (!message) {
+        return res.status(400).json({ error: 'Message vide !' });
+    }
+
+    const author = typeof req.body.author === 'string' ? req.body.author.trim().slice(0, 12) : '';
+    const authorId = typeof req.body.authorId === 'string' ? req.body.authorId.trim().slice(0, 64) : '';
+
+    let newMessage = new Message({ message, author: author || 'Anonymous', authorId })
     newMessage.save()
         .then((msg) => res.status(200).json({ msg }))
         .catch((err) => res.status(400).json({ err }))

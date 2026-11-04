@@ -1,6 +1,6 @@
 {
-  "short_name": "Socket-Tchat",
-  "name": "A fast and safe websocket tchat",
+  "short_name": "Socket Chat",
+  "name": "Socket Chat — real-time chat",
   "icons": [
     {
       "src": "icon-chat.png",

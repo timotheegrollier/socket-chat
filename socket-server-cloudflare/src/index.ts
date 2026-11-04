@@ -3,6 +3,7 @@ export interface Env {
   ASSETS: {
     fetch: typeof fetch;
   };
+  VERSION?: string;
 }
 
 type BinaryAttachment = ArrayBuffer | ArrayBufferView;
@@ -47,7 +48,11 @@ export default {
 
     if (url.pathname === '/health') {
       return new Response(
-        JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }),
+        JSON.stringify({
+          status: 'ok',
+          version: env.VERSION ?? 'development',
+          timestamp: new Date().toISOString(),
+        }),
         {
           headers: {
             'content-type': 'application/json',
@@ -268,6 +273,11 @@ export class ChatRoom {
       return;
     }
 
+    if (eventName === 'typing' || eventName === 'stopTyping') {
+      this.handleTyping(client, eventName, payload);
+      return;
+    }
+
     if (eventName === 'resetTchat') {
       this.broadcastToAll('reset', {});
       return;
@@ -332,8 +342,24 @@ export class ChatRoom {
     });
   }
 
-  private handleRelayText(client: Client, payload: unknown): void {
-    if (!payload || typeof payload !== 'object') return;
+  private handleTyping(
+    client: Client,
+    eventName: 'typing' | 'stopTyping',
+    payload: unknown
+  ): void {
+    let name = '';
+    if (typeof payload === 'string') {
+      name = payload.trim().slice(0, MAX_NAME_LENGTH);
+    } else if (payload && typeof payload === 'object') {
+      const raw = (payload as { name?: unknown }).name;
+      if (typeof raw === 'string') {
+        name = raw.trim().slice(0, MAX_NAME_LENGTH);
+      }
+    }
+    this.broadcastExcept(client.id, eventName, { name });
+  }
+
+  private handleRelayText(client: Client, payload: unknown): void {    if (!payload || typeof payload !== 'object') return;
     const { target: targetId, data, meta } = payload as {
       target?: unknown;
       data?: unknown;
@@ -451,6 +477,17 @@ export class ChatRoom {
   private broadcastToAll(eventName: string, payload: unknown): void {
     for (const client of this.sockets.values()) {
       if (client.closed) continue;
+      this.sendEvent(client, eventName, payload);
+    }
+  }
+
+  private broadcastExcept(
+    exceptId: string,
+    eventName: string,
+    payload: unknown
+  ): void {
+    for (const client of this.sockets.values()) {
+      if (client.closed || client.id === exceptId) continue;
       this.sendEvent(client, eventName, payload);
     }
   }

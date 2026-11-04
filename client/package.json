@@ -1,6 +1,6 @@
 {
-  "name": "client",
-  "version": "0.1.0",
+  "name": "socket-chat-client",
+  "version": "2.0.0",
   "private": true,
   "homepage": "/",
   "dependencies": {
@@ -10,7 +10,6 @@
     "axios": "^0.24.0",
     "bootstrap": "^5.1.3",
     "jquery": "^3.6.0",
-    "node-sass": "^7.0.1",
     "popper.js": "^1.16.1",
     "react": "^17.0.2",
     "react-bootstrap": "^2.1.0",
@@ -26,7 +25,7 @@
   "proxy": "http://localhost:3001/",
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "REACT_APP_VERSION=$(node -p \"require('./package.json').version\") react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

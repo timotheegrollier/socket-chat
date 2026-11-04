@@ -1,0 +1,57 @@
+name: Bug report
+description: Something is broken in the chat, API or deployment
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Please avoid pasting secrets (JWTs, Mongo passwords, Cloudflare tokens).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown on the About page / chat header (e.g. 2.0.0)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Chat (frontend)
+        - Socket / realtime (Cloudflare Worker)
+        - REST API (Express / MongoDB)
+        - Deployment / CI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the site
+        2. Log in
+        3. Send a message
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include console/network errors if relevant (without tokens).
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: 'Chrome 130, Android 14 / Node 20, wrangler 4.156'
