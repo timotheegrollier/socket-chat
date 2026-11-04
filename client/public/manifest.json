@@ -1,25 +1,30 @@
 {
   "short_name": "Socket Chat",
   "name": "Socket Chat — real-time chat",
+  "description": "Real-time chat built with React, Socket.IO, Express/MongoDB and Cloudflare Workers.",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0a0c11",
+  "background_color": "#0a0c11",
   "icons": [
     {
       "src": "icon-chat.png",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "icon-chat.png",
+      "sizes": "512x512",
       "type": "image/png",
-      "sizes": "192x192"
+      "purpose": "any"
     },
     {
-      "src": "icon-chat.png",
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
       "type": "image/png",
-      "sizes": "512x512"
+      "purpose": "maskable"
     }
-  ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#8C57E0"
+  ]
 }

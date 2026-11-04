@@ -22,9 +22,9 @@ self.addEventListener('install', e => {
   const deleteCache = async (key) => {
     await caches.delete(key);
   };
-  
+
   const deleteOldCaches = async () => {
-    const cacheKeepList = ["v2"];
+    const cacheKeepList = ["pwa"];
     const keyList = await caches.keys();
     const cachesToDelete = keyList.filter((key) => !cacheKeepList.includes(key));
     await Promise.all(cachesToDelete.map(deleteCache));
