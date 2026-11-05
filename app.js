@@ -11,6 +11,8 @@ const app = express()
 
 const msgRoutes = require('./routes/messages')
 
+const channelsRoutes = require('./routes/channels')
+
 const usersRoutes = require('./routes/users')
 
 
@@ -42,6 +44,8 @@ mongoose.connect("mongodb+srv://" + DBUSER + "@cluster0.zvv7c.mongodb.net/myFirs
     .catch(() => console.log('Connexion à MongoDB échouée !'));
 
 app.use('/api/messages', msgRoutes)
+
+app.use('/api/channels', channelsRoutes)
 
 
 app.use('/api/secure', usersRoutes)

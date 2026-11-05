@@ -1,6 +1,21 @@
 const Message = require('../models/chatMessage')
 
+const DEFAULT_CHANNEL = 'general'
+const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/
 
+const normalizeChannel = (value) => {
+    if (typeof value !== 'string') return DEFAULT_CHANNEL
+    const name = value.trim().toLowerCase().replace(/^#/, '')
+    return CHANNEL_PATTERN.test(name) ? name : DEFAULT_CHANNEL
+}
+
+const channelFilter = (channel) => {
+    if (channel === DEFAULT_CHANNEL) {
+        // Messages sent before channels existed have no channel field.
+        return { $or: [{ channel: DEFAULT_CHANNEL }, { channel: { $exists: false } }] }
+    }
+    return { channel }
+}
 
 exports.newMessage = (req, res, next) => {
     const message = typeof req.body.message === 'string' ? req.body.message.trim().slice(0, 500) : '';
@@ -10,23 +25,27 @@ exports.newMessage = (req, res, next) => {
 
     const author = typeof req.body.author === 'string' ? req.body.author.trim().slice(0, 12) : '';
     const authorId = typeof req.body.authorId === 'string' ? req.body.authorId.trim().slice(0, 64) : '';
+    const channel = normalizeChannel(req.body.channel)
 
-    let newMessage = new Message({ message, author: author || 'Anonymous', authorId })
+    let newMessage = new Message({ message, author: author || 'Anonymous', authorId, channel })
     newMessage.save()
         .then((msg) => res.status(200).json({ msg }))
         .catch((err) => res.status(400).json({ err }))
 }
 
 exports.getMessages = (req, res, next) => {
-    Message.find()
-        .then(messages => res.status(200).json({ messages }))
+    const channel = normalizeChannel(req.query.channel)
+    Message.find(channelFilter(channel))
+        .sort({ createdAt: 1 })
+        .then(messages => res.status(200).json({ messages, channel }))
         .catch(error => res.status(400).json({ error }))
 }
 
 exports.deleteMessages = (req, res) => {
-    Message.deleteMany()
+    const channel = normalizeChannel(req.query.channel || req.body.channel)
+    Message.deleteMany(channelFilter(channel))
         .then(() => {
-            res.status(200).json({ msg: "Tchat supprimé !" });
+            res.status(200).json({ msg: "Tchat supprimé !", channel });
         })
         .catch((error) => res.status(400).json({ error }))
 }

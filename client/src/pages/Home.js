@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.0.2';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.1.0';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -43,6 +43,14 @@ const dayKey = (iso) => {
     const d = new Date(iso)
     return isNaN(d.getTime()) ? 'earlier' : d.toDateString()
 }
+
+const sortChannels = (list) => [...list].sort((a, b) => {
+    if (a.name === 'general') return -1
+    if (b.name === 'general') return 1
+    return new Date(a.createdAt || 0) - new Date(b.createdAt || 0)
+})
+
+const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/
 
 const IconSearch = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -93,6 +101,10 @@ const Home = () => {
     const [searchTerm, setSearchTerm] = useStateIfMounted('')
     const [sidebarOpen, setSidebarOpen] = useStateIfMounted(false)
     const [toasts, setToasts] = useStateIfMounted([])
+    const [channels, setChannels] = useStateIfMounted([])
+    const [activeChannel, setActiveChannel] = useStateIfMounted(localStorage.getItem('socket-chat-channel') || 'general')
+    const [creatingChannel, setCreatingChannel] = useStateIfMounted(false)
+    const [newChannelName, setNewChannelName] = useStateIfMounted('')
 
     const socketRef = useRef()
     const inputRef = useRef()
@@ -100,6 +112,9 @@ const Home = () => {
     const typingTimerRef = useRef()
     const emojiRef = useRef()
     const emojiBtnRef = useRef()
+    const channelInputRef = useRef()
+    const activeChannelRef = useRef(activeChannel)
+    const messagesRequestRef = useRef(0)
 
     const config = require('../config.json')
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -128,6 +143,15 @@ const Home = () => {
             ? `(${unread}) new message${unread > 1 ? 's' : ''} — Socket Chat`
             : 'Socket Chat'
     }, [unread]);
+
+    useEffect(() => {
+        activeChannelRef.current = activeChannel
+        localStorage.setItem('socket-chat-channel', activeChannel)
+    }, [activeChannel]);
+
+    useEffect(() => {
+        if (creatingChannel && channelInputRef.current) channelInputRef.current.focus()
+    }, [creatingChannel]);
 
     useEffect(() => {
         const clearUnread = () => {
@@ -202,13 +226,25 @@ const Home = () => {
             setSocketReady(false)
         })
 
-        socket.on("newMsg", () => {
+        socket.on("newMsg", (data) => {
+            const channel = data && data.channel
+            if (channel && channel !== activeChannelRef.current) return
             if (document.hidden) setUnread((current) => (current || 0) + 1)
-            fetchMessages()
+            fetchMessages(activeChannelRef.current)
         })
-        socket.on("reset", () => {
+        socket.on("reset", (data) => {
+            const channel = data && data.channel
+            if (channel && channel !== activeChannelRef.current) return
             setMsg([])
-            fetchMessages()
+            fetchMessages(activeChannelRef.current)
+        })
+        socket.on("channelsChanged", () => {
+            refreshChannels()
+        })
+        socket.on("channelDeleted", (data) => {
+            const channel = data && data.channel
+            if (channel && channel === activeChannelRef.current) changeChannel('general')
+            refreshChannels()
         })
         socket.on('count', (count) => {
             setUserCount(count)
@@ -217,10 +253,14 @@ const Home = () => {
             setOnlineUsers(Array.isArray(users) ? users : [])
         })
         socket.on("typing", (data) => {
+            const channel = data && data.channel
+            if (channel && channel !== activeChannelRef.current) return
             const name = data && typeof data.name === 'string' ? data.name : ''
             setTypingName(name.trim().slice(0, 12))
         })
-        socket.on("stopTyping", () => {
+        socket.on("stopTyping", (data) => {
+            const channel = data && data.channel
+            if (channel && channel !== activeChannelRef.current) return
             setTypingName('')
         })
     }
@@ -228,7 +268,12 @@ const Home = () => {
     const getLogged = async (isConnected) => {
         setupSocket()
         setConnected(isConnected)
-        fetchMessages()
+        const list = await fetchChannels()
+        const wanted = activeChannelRef.current || 'general'
+        const channel = list.some((item) => item.name === wanted) ? wanted : 'general'
+        activeChannelRef.current = channel
+        setActiveChannel(channel)
+        fetchMessages(channel, true)
         getUsername().then((username) => {
             setUser({
                 userId: JSON.parse(localStorage.getItem('JWT')).userId,
@@ -246,20 +291,75 @@ const Home = () => {
         return username
     }
 
-    const fetchMessages = async () => {
+    const fetchChannels = async () => {
+        try {
+            const res = await axios.get(config.api_url + '/api/channels')
+            const list = Array.isArray(res.data.channels) ? res.data.channels : []
+            if (!list.some((channel) => channel.name === 'general')) {
+                list.unshift({ name: 'general', createdAt: null })
+            }
+            const sorted = sortChannels(list)
+            setChannels(sorted)
+            return sorted
+        } catch (error) {
+            const fallback = [{ name: 'general', createdAt: null }]
+            setChannels(fallback)
+            return fallback
+        }
+    }
+
+    const refreshChannels = async () => {
+        const list = await fetchChannels()
+        if (!list.some((channel) => channel.name === activeChannelRef.current)) {
+            changeChannel('general')
+        }
+    }
+
+    const changeChannel = (name) => {
+        const target = name || 'general'
+        if (target === activeChannelRef.current) {
+            setSidebarOpen(false)
+            return
+        }
+        stopTyping()
+        clearInput()
+        activeChannelRef.current = target
+        setActiveChannel(target)
+        localStorage.setItem('socket-chat-channel', target)
+        messagesRequestRef.current += 1
+        setMsg([])
+        setHasLoaded(false)
+        setNewBelow(false)
+        setTypingName('')
+        setSearchOpen(false)
+        setSearchTerm('')
+        fetchMessages(target, true)
+        setSidebarOpen(false)
+        if (!isMobile && inputRef.current) inputRef.current.focus()
+    }
+
+    const fetchMessages = async (channel = activeChannelRef.current, forceBottom = false) => {
+        const target = channel || 'general'
+        const requestId = ++messagesRequestRef.current
         const list = tchatRef.current
-        const nearBottom = !list || (list.scrollHeight - list.scrollTop - list.clientHeight < 150)
-        await axios.get(config.api_url + '/api/messages')
+        const nearBottom = forceBottom || !list || (list.scrollHeight - list.scrollTop - list.clientHeight < 150)
+        await axios.get(config.api_url + '/api/messages', { params: { channel: target } })
             .then(res => {
+                if (requestId !== messagesRequestRef.current) return
                 const incoming = Array.isArray(res.data.messages) ? res.data.messages : []
                 setMsg((current) => {
                     // Keep messages still being sent so a socket refresh never
                     // makes an optimistic message disappear before the POST ends.
-                    const pending = (current || []).filter((m) => m && m.pending)
+                    const pending = (current || []).filter((m) => m && m.pending && m.channel === target)
                     return pending.length ? [...incoming, ...pending] : incoming
                 })
             })
-            .catch(() => pushToast('Unable to load messages.', 'error'))
+            .catch(() => {
+                if (requestId === messagesRequestRef.current) {
+                    pushToast('Unable to load messages.', 'error')
+                }
+            })
+        if (requestId !== messagesRequestRef.current) return
         setHasLoaded(true)
         if (nearBottom) {
             const el = tchatRef.current
@@ -291,14 +391,16 @@ const Home = () => {
     const notifyTyping = () => {
         if (!socketRef.current || !socketReady) return
         const name = (user && user.username) || 'Anonymous'
-        socketRef.current.emit('typing', name)
+        socketRef.current.emit('typing', { name, channel: activeChannelRef.current || 'general' })
         clearTimeout(typingTimerRef.current)
         typingTimerRef.current = setTimeout(() => stopTyping(), 2000)
     }
 
     const stopTyping = () => {
         clearTimeout(typingTimerRef.current)
-        if (socketRef.current) socketRef.current.emit('stopTyping')
+        if (socketRef.current) {
+            socketRef.current.emit('stopTyping', { channel: activeChannelRef.current || 'general' })
+        }
     }
 
     const checkMessage = (e) => {
@@ -338,12 +440,14 @@ const Home = () => {
 
         const text = value.slice(0, MAX_MESSAGE_LENGTH)
         const author = (user && user.username) || 'Anonymous'
+        const channel = activeChannelRef.current || 'general'
         const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
         const optimistic = {
             _id: tempId,
             message: text,
             author,
             authorId: myUserId || '',
+            channel,
             createdAt: new Date().toISOString(),
             pending: true,
         }
@@ -365,28 +469,33 @@ const Home = () => {
         axios.post(config.api_url + '/api/messages/new', {
             message: text,
             author,
-            authorId: myUserId || ''
+            authorId: myUserId || '',
+            channel
         })
             .then((res) => {
                 const saved = res.data && res.data.msg
-                setMsg((current) => {
-                    const withoutTemp = (current || []).filter((m) => m._id !== tempId)
-                    if (!saved || !saved._id) return withoutTemp
-                    // A socket refresh may already have fetched the saved message.
-                    if (withoutTemp.some((m) => m._id === saved._id)) return withoutTemp
-                    return [...withoutTemp, saved]
-                })
+                if (activeChannelRef.current === channel) {
+                    setMsg((current) => {
+                        const withoutTemp = (current || []).filter((m) => m._id !== tempId)
+                        if (!saved || !saved._id) return withoutTemp
+                        // A socket refresh may already have fetched the saved message.
+                        if (withoutTemp.some((m) => m._id === saved._id)) return withoutTemp
+                        return [...withoutTemp, saved]
+                    })
+                }
                 setSending(false)
-                if (socketRef.current) socketRef.current.emit("newMsg")
+                if (socketRef.current) socketRef.current.emit("newMsg", { channel })
                 if (!isMobile && inputRef.current) inputRef.current.focus()
             })
             .catch(() => {
-                // Roll back the optimistic message and give the text back.
-                setMsg((current) => (current || []).filter((m) => m._id !== tempId))
-                if (inputRef.current && !inputRef.current.value) {
-                    inputRef.current.value = text
-                    setCharCount(text.length)
-                    autoGrow()
+                if (activeChannelRef.current === channel) {
+                    // Roll back the optimistic message and give the text back.
+                    setMsg((current) => (current || []).filter((m) => m._id !== tempId))
+                    if (inputRef.current && !inputRef.current.value) {
+                        inputRef.current.value = text
+                        setCharCount(text.length)
+                        autoGrow()
+                    }
                 }
                 setSending(false)
                 pushToast('Message not sent. Check your connection.', 'error')
@@ -408,23 +517,73 @@ const Home = () => {
     }
 
     const deleteTchat = () => {
-        if (!window.confirm('/delete clears the whole conversation for everyone. Continue?')) return
-        axios.delete(config.api_url + '/api/messages').then(() => {
+        const channel = activeChannelRef.current || 'general'
+        if (!window.confirm(`/delete clears #${channel} for everyone. Continue?`)) return
+        axios.delete(config.api_url + '/api/messages', { params: { channel } }).then(() => {
             setMsg([])
-            if (socketRef.current) socketRef.current.emit('resetTchat')
-            pushToast('Conversation cleared.', 'success')
-        }).catch(() => pushToast('Unable to clear the conversation.', 'error'))
+            if (socketRef.current) socketRef.current.emit('resetTchat', { channel })
+            pushToast(`#${channel} cleared.`, 'success')
+        }).catch(() => pushToast(`Unable to clear #${channel}.`, 'error'))
     }
 
     const deleteMessage = (message) => {
         if (!window.confirm('Delete this message?')) return
+        const channel = message.channel || activeChannelRef.current || 'general'
         axios.delete(config.api_url + '/api/messages/' + message._id, {
             data: { authorId: myUserId }
         }).then(() => {
             setMsg((current) => current.filter((m) => m._id !== message._id))
-            if (socketRef.current) socketRef.current.emit('newMsg')
+            if (socketRef.current) socketRef.current.emit('newMsg', { channel })
             pushToast('Message deleted.', 'success')
         }).catch(() => pushToast('Unable to delete this message.', 'error'))
+    }
+
+    const createChannel = (event) => {
+        if (event) event.preventDefault()
+        const name = newChannelName.trim().toLowerCase().replace(/^#/, '')
+        if (!CHANNEL_PATTERN.test(name)) {
+            pushToast('Use 1-24 lowercase letters, numbers or hyphens.', 'warning')
+            return
+        }
+        if (channels.some((channel) => channel.name === name)) {
+            setCreatingChannel(false)
+            setNewChannelName('')
+            changeChannel(name)
+            pushToast(`#${name} already exists.`, 'info')
+            return
+        }
+
+        axios.post(config.api_url + '/api/channels/new', { name })
+            .then((res) => {
+                const channel = res.data && res.data.channel
+                setChannels((current) => sortChannels([
+                    ...current.filter((item) => item.name !== name),
+                    channel || { name, createdAt: new Date().toISOString() },
+                ]))
+                setCreatingChannel(false)
+                setNewChannelName('')
+                changeChannel(name)
+                if (socketRef.current) socketRef.current.emit('channelsChanged')
+                pushToast(`#${name} created.`, 'success')
+            })
+            .catch((error) => {
+                const apiError = error.response && error.response.data && error.response.data.error
+                pushToast(typeof apiError === 'string' ? apiError : 'Unable to create channel.', 'error')
+            })
+    }
+
+    const deleteChannel = (name) => {
+        if (name === 'general') return
+        if (!window.confirm(`Delete #${name} and all its messages?`)) return
+
+        axios.delete(config.api_url + '/api/channels/' + encodeURIComponent(name))
+            .then(() => {
+                setChannels((current) => current.filter((channel) => channel.name !== name))
+                if (activeChannelRef.current === name) changeChannel('general')
+                if (socketRef.current) socketRef.current.emit('channelDeleted', { channel: name })
+                pushToast(`#${name} deleted.`, 'success')
+            })
+            .catch(() => pushToast(`Unable to delete #${name}.`, 'error'))
     }
 
     const copyMessage = (message) => {
@@ -537,13 +696,80 @@ const Home = () => {
                 <div className="chat-shell">
 
                     <aside className={'chat-sidebar' + (sidebarOpen ? ' open' : '')}>
-                        <div className="sidebar-section">
-                            <span className="sidebar-label">Channel</span>
-                            <div className="channel">
-                                <span className="channel-hash">#</span>
-                                general
-                                <span className="badge-count">{onlineCount}</span>
-                            </div>
+                        <div className="sidebar-section sidebar-channels">
+                            <span className="sidebar-label">
+                                <span>Channels</span>
+                                <button
+                                    type="button"
+                                    className="channel-add"
+                                    title="New channel"
+                                    aria-label="New channel"
+                                    onClick={() => {
+                                        setCreatingChannel(!creatingChannel)
+                                        setNewChannelName('')
+                                    }}
+                                >
+                                    +
+                                </button>
+                            </span>
+
+                            {creatingChannel && (
+                                <form className="channel-create" onSubmit={createChannel}>
+                                    <span className="channel-hash">#</span>
+                                    <input
+                                        ref={channelInputRef}
+                                        type="text"
+                                        value={newChannelName}
+                                        maxLength={24}
+                                        placeholder="new-channel"
+                                        aria-label="New channel name"
+                                        onChange={(e) => setNewChannelName(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Escape') {
+                                                e.stopPropagation()
+                                                setCreatingChannel(false)
+                                                setNewChannelName('')
+                                            }
+                                        }}
+                                    />
+                                    <button type="submit" aria-label="Create channel" title="Create channel">
+                                        ↵
+                                    </button>
+                                </form>
+                            )}
+
+                            <ul className="channel-list">
+                                {channels.map((channel) => (
+                                    <li
+                                        key={channel.name}
+                                        className={'channel-item' + (channel.name === activeChannel ? ' active' : '')}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="channel"
+                                            title={`#${channel.name}`}
+                                            onClick={() => changeChannel(channel.name)}
+                                        >
+                                            <span className="channel-hash">#</span>
+                                            <span className="channel-name">{channel.name}</span>
+                                            {channel.name === activeChannel && (
+                                                <span className="badge-count">{onlineCount}</span>
+                                            )}
+                                        </button>
+                                        {channel.name !== 'general' && (
+                                            <button
+                                                type="button"
+                                                className="channel-delete"
+                                                title={`Delete #${channel.name}`}
+                                                aria-label={`Delete #${channel.name}`}
+                                                onClick={() => deleteChannel(channel.name)}
+                                            >
+                                                <IconTrash />
+                                            </button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
 
                         <div className="sidebar-section sidebar-online">
@@ -600,7 +826,7 @@ const Home = () => {
                             </button>
 
                             <div className="chat-heading">
-                                <h1># general</h1>
+                                <h1># {activeChannel}</h1>
                                 <p>{socketReady ? `${onlineCount} online` : 'Reconnecting…'}</p>
                             </div>
 
@@ -626,7 +852,7 @@ const Home = () => {
                                     type="text"
                                     autoFocus
                                     value={searchTerm}
-                                    placeholder="Search this conversation…"
+                                    placeholder={`Search #${activeChannel}…`}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                                 <span className="results">{filtered.length} result{filtered.length === 1 ? '' : 's'}</span>
@@ -650,7 +876,7 @@ const Home = () => {
                                 <div className="chat-state chat-empty">
                                     <div className="empty-emoji" aria-hidden="true">{term ? '🔍' : '💬'}</div>
                                     <h3>{term ? 'No matching messages' : 'No messages yet'}</h3>
-                                    <p>{term ? 'Try a different search.' : 'Be the first to say hello in #general.'}</p>
+                                    <p>{term ? 'Try a different search.' : `Be the first to say hello in #${activeChannel}.`}</p>
                                 </div>
                             ) : buildTimeline()}
 
@@ -701,7 +927,7 @@ const Home = () => {
                                         ref={inputRef}
                                         rows={1}
                                         maxLength={MAX_MESSAGE_LENGTH}
-                                        placeholder="Message #general"
+                                        placeholder={`Message #${activeChannel}`}
                                         onChange={checkMessage}
                                         onKeyDown={handleKeyDown}
                                         onBlur={() => stopTyping()}
