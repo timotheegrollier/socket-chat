@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import About from './About';
+import { version } from '../../package.json';
 
 test('announces version 2.0 and displays the current build version', () => {
   render(
@@ -9,7 +10,8 @@ test('announces version 2.0 and displays the current build version', () => {
     </MemoryRouter>
   );
 
-  const versionLabels = screen.getAllByText(/version 2\.0\.0/i);
+  const escaped = version.replace(/\./g, '\\.');
+  const versionLabels = screen.getAllByText(new RegExp(`version ${escaped}`, 'i'));
   expect(versionLabels.length).toBeGreaterThan(0);
   expect(screen.getByText(/what's new in 2\.0/i)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /open the chat/i })).toBeInTheDocument();

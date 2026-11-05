@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.0.0';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.0.1';
 
 const NEW_IN_V2 = [
     {
