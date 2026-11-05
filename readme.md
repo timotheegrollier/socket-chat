@@ -4,7 +4,7 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.0.0** turns the original proof of concept into a usable chat:
+Version **2.0.1** turns the original proof of concept into a usable chat:
 identified messages, typing indicator, unread notifications, a rebuilt interface
 and a cloud-native realtime layer.
 
@@ -201,7 +201,7 @@ disconnect.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.0.0", "timestamp": "..." }
+{ "status": "ok", "version": "2.0.1", "timestamp": "..." }
 ```
 
 ---
@@ -280,7 +280,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.0.0**. It is displayed on the About page and in the
+The current version is **2.0.1**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and
