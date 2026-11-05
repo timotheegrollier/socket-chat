@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.0.1';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.0.2';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -250,7 +250,15 @@ const Home = () => {
         const list = tchatRef.current
         const nearBottom = !list || (list.scrollHeight - list.scrollTop - list.clientHeight < 150)
         await axios.get(config.api_url + '/api/messages')
-            .then(res => setMsg(res.data.messages))
+            .then(res => {
+                const incoming = Array.isArray(res.data.messages) ? res.data.messages : []
+                setMsg((current) => {
+                    // Keep messages still being sent so a socket refresh never
+                    // makes an optimistic message disappear before the POST ends.
+                    const pending = (current || []).filter((m) => m && m.pending)
+                    return pending.length ? [...incoming, ...pending] : incoming
+                })
+            })
             .catch(() => pushToast('Unable to load messages.', 'error'))
         setHasLoaded(true)
         if (nearBottom) {
@@ -319,7 +327,7 @@ const Home = () => {
     }
 
     const submitMessage = () => {
-        if (!socketReady || sending) return
+        if (sending) return
         const value = ((inputRef.current && inputRef.current.value) || '').trim()
         if (!value) return
 
@@ -328,21 +336,58 @@ const Home = () => {
             return
         }
 
+        const text = value.slice(0, MAX_MESSAGE_LENGTH)
+        const author = (user && user.username) || 'Anonymous'
+        const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+        const optimistic = {
+            _id: tempId,
+            message: text,
+            author,
+            authorId: myUserId || '',
+            createdAt: new Date().toISOString(),
+            pending: true,
+        }
+
         setSending(true)
         stopTyping()
+
+        // Show the message immediately, before the API round-trip.
+        setMsg((current) => [...(current || []), optimistic])
+        setHasLoaded(true)
+        setNewBelow(false)
+        clearInput()
+        requestAnimationFrame(() => {
+            const el = tchatRef.current
+            if (el) el.scrollTop = el.scrollHeight - el.clientHeight
+        })
+        if (!isMobile && inputRef.current) inputRef.current.focus()
+
         axios.post(config.api_url + '/api/messages/new', {
-            message: value.slice(0, MAX_MESSAGE_LENGTH),
-            author: (user && user.username) || 'Anonymous',
+            message: text,
+            author,
             authorId: myUserId || ''
         })
-            .then(() => {
-                clearInput()
-                fetchMessages()
+            .then((res) => {
+                const saved = res.data && res.data.msg
+                setMsg((current) => {
+                    const withoutTemp = (current || []).filter((m) => m._id !== tempId)
+                    if (!saved || !saved._id) return withoutTemp
+                    // A socket refresh may already have fetched the saved message.
+                    if (withoutTemp.some((m) => m._id === saved._id)) return withoutTemp
+                    return [...withoutTemp, saved]
+                })
                 setSending(false)
                 if (socketRef.current) socketRef.current.emit("newMsg")
                 if (!isMobile && inputRef.current) inputRef.current.focus()
             })
             .catch(() => {
+                // Roll back the optimistic message and give the text back.
+                setMsg((current) => (current || []).filter((m) => m._id !== tempId))
+                if (inputRef.current && !inputRef.current.value) {
+                    inputRef.current.value = text
+                    setCharCount(text.length)
+                    autoGrow()
+                }
                 setSending(false)
                 pushToast('Message not sent. Check your connection.', 'error')
             })
@@ -469,7 +514,7 @@ const Home = () => {
                         <button type="button" title="Copy message" onClick={() => copyMessage(message)}>
                             <IconCopy />
                         </button>
-                        {own && (
+                        {own && !message.pending && (
                             <button type="button" className="danger" title="Delete message" onClick={() => deleteMessage(message)}>
                                 <IconTrash />
                             </button>
@@ -592,17 +637,11 @@ const Home = () => {
                         )}
 
                         {!socketReady && (
-                            <div className="conn-banner">Connection lost — reconnecting to the realtime server…</div>
+                            <div className="conn-banner">Realtime connection lost — reconnecting… Messages still send over HTTPS.</div>
                         )}
 
                         <ul id="tchat" onScroll={handleScroll} ref={tchatRef}>
-                            {!socketReady ? (
-                                <div className="chat-state">
-                                    <div className="loader-ring" aria-hidden="true"></div>
-                                    <h3>Connecting to the chat…</h3>
-                                    <p>Starting a WebSocket session.</p>
-                                </div>
-                            ) : !hasLoaded ? (
+                            {!hasLoaded ? (
                                 <div className="chat-state">
                                     <div className="loader-ring" aria-hidden="true"></div>
                                     <h3>Loading messages…</h3>
@@ -653,7 +692,6 @@ const Home = () => {
                                         aria-label="Add emoji"
                                         title="Emoji"
                                         onClick={() => setShowEmoji(!showEmoji)}
-                                        disabled={!socketReady}
                                     >
                                         😊
                                     </button>
@@ -663,11 +701,10 @@ const Home = () => {
                                         ref={inputRef}
                                         rows={1}
                                         maxLength={MAX_MESSAGE_LENGTH}
-                                        placeholder={socketReady ? 'Message #general' : 'Connecting…'}
+                                        placeholder="Message #general"
                                         onChange={checkMessage}
                                         onKeyDown={handleKeyDown}
                                         onBlur={() => stopTyping()}
-                                        disabled={!socketReady}
                                         autoFocus={!isMobile}
                                     ></textarea>
 
@@ -676,7 +713,7 @@ const Home = () => {
                                         className="send-btn"
                                         aria-label="Send message"
                                         title="Send"
-                                        disabled={!socketReady || !charCount || sending}
+                                        disabled={!charCount || sending}
                                     >
                                         {sending ? <span className="spinner" aria-hidden="true"></span> : <IconSend />}
                                     </button>

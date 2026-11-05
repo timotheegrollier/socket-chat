@@ -465,6 +465,15 @@
     overflow-wrap: anywhere;
 }
 
+.msg.pending .msg-text {
+    opacity: 0.65;
+}
+
+.msg.pending .msg-time::after {
+    content: ' · sending';
+    color: var(--muted);
+}
+
 .msg-actions {
     position: absolute;
     top: -12px;

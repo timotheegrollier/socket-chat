@@ -32,6 +32,10 @@ jobs:
 
       - name: Build client
         working-directory: client
+        env:
+          # The public frontend lives on GitHub Pages. Keep the Cloudflare
+          # copy self-contained as a fallback (root-relative assets).
+          PUBLIC_URL: /
         run: |
           npm ci
           node -e "const fs=require('fs');fs.writeFileSync('src/config.json', JSON.stringify({api_url: process.env.API_URL, socket_url: process.env.SOCKET_URL}))"

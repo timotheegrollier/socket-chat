@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2026-11-01"
 
 [vars]
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 
 [assets]
 directory = "../client/build"

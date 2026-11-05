@@ -32,6 +32,7 @@ const MAX_NAME_LENGTH = 64;
 // The chat frontend origin and local development origins. Add any custom
 // frontend domain here before deploying it.
 const ALLOWED_ORIGINS = new Set([
+  'https://timotheegrollier.github.io',
   'https://socket-chat.sitizstorm.workers.dev',
   'https://socket-tchat.onrender.com',
   'http://localhost:8787',

@@ -4,11 +4,14 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.0.1** turns the original proof of concept into a usable chat:
+Version **2.0.2** turns the original proof of concept into a usable chat:
 identified messages, typing indicator, unread notifications, a rebuilt interface
 and a cloud-native realtime layer.
 
-**Live:** https://socket-chat.sitizstorm.workers.dev
+**Live:** https://timotheegrollier.github.io/socket-chat/
+
+The static frontend is hosted on **GitHub Pages**; the realtime socket layer
+runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 
 ---
 
@@ -50,20 +53,26 @@ and a cloud-native realtime layer.
                  ▼                                    ▼
      ┌───────────────────────┐          ┌──────────────────────────────┐
      │  Node.js / Express    │          │  Cloudflare Worker           │
-     │  Render               │          │  ├─ ASSETS → client/build    │
-     │  └─ MongoDB Atlas     │          │  └─ Durable Object ChatRoom  │
-     │     users + messages  │          │     (in-memory socket state) │
+     │  Render               │          │  └─ Durable Object ChatRoom  │
+     │  └─ MongoDB Atlas     │          │     (in-memory socket state) │
+     │     users + messages  │          │                              │
      └───────────────────────┘          └──────────────────────────────┘
+
+        React SPA (GitHub Pages) ── REST ──► Render
+                                  ── WebSocket ──► Cloudflare Worker
 ```
 
-- The **Worker** serves the React production build through the `ASSETS` binding
-  and routes `/socket.io/*` upgrades to a single **Durable Object** (`ChatRoom`),
-  which implements the Engine.IO / Socket.IO protocol subset used by the client.
+- The **React SPA** is built by Create React App and deployed to **GitHub Pages**
+  by the `pages.yml` workflow.
+- The **Worker** routes `/socket.io/*` upgrades to a single **Durable Object**
+  (`ChatRoom`), which implements the Engine.IO / Socket.IO protocol subset used
+  by the client. It also keeps a self-contained copy of the static build through
+  the `ASSETS` binding as a fallback.
 - The **REST API** (Node.js / Express + MongoDB) runs on **Render**. It handles
   authentication and message persistence; the socket layer only notifies clients
   so they refetch through the API.
-- **Cloudflare** hosts the edge layer. Render redeploys the API on every push to
-  `master`; GitHub Actions deploys the Worker and static assets after merge.
+- **GitHub Actions** deploys the frontend to Pages, the Worker to Cloudflare and
+  Render redeploys the API on every push to `master`.
 
 ---
 
@@ -86,7 +95,8 @@ and a cloud-native realtime layer.
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml              # tests + build on every PR and push to master
-│   │   └── deploy.yml          # build + deploy to Cloudflare on master
+│   │   ├── deploy.yml          # deploy the socket Worker to Cloudflare on master
+│   │   └── pages.yml           # build + deploy the frontend to GitHub Pages
 │   ├── ISSUE_TEMPLATE/
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   └── CONTRIBUTING.md
@@ -201,7 +211,7 @@ disconnect.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.0.1", "timestamp": "..." }
+{ "status": "ok", "version": "2.0.2", "timestamp": "..." }
 ```
 
 ---
@@ -253,9 +263,12 @@ two clients, and `stopTyping`.
     tests, production build.
   - `worker`: install, TypeScript typecheck, start `wrangler dev`, protocol tests.
 - A pull request can only be merged when both checks are green.
-- Merging to `master` triggers **Deploy** (`deploy.yml`), which rebuilds the
-  client, deploys the Worker + `client/build` assets to Cloudflare with
-  `cloudflare/wrangler-action`, then smoke-tests `/health`.
+- Merging to `master` triggers two deployments:
+  - **Deploy** (`deploy.yml`) deploys the socket Worker to Cloudflare with
+    `cloudflare/wrangler-action`, then smoke-tests `/health`.
+  - **Deploy frontend to GitHub Pages** (`pages.yml`) builds the React app and
+    publishes `client/build` to GitHub Pages. The repository's Pages source must
+    be set to **GitHub Actions**.
 
 ### Required repository configuration
 
@@ -274,13 +287,14 @@ annotation instead of failing the pipeline.
 1. Create a branch, commit your changes and open a pull request against `master`.
 2. Wait for CI to pass; request a review or self-merge (no approval required).
 3. Squash-merge the pull request.
-4. The Deploy workflow deploys to Cloudflare automatically.
+4. The Deploy workflow updates the Cloudflare Worker, and the Pages workflow
+   publishes the frontend to GitHub Pages, both automatically.
 
 ---
 
 ## Versioning
 
-The current version is **2.0.1**. It is displayed on the About page and in the
+The current version is **2.0.2**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and
