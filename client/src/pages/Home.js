@@ -337,6 +337,7 @@ const Home = () => {
         })
             .then(() => {
                 clearInput()
+                fetchMessages()
                 if (socketRef.current) socketRef.current.emit("newMsg")
                 if (!isMobile && inputRef.current) inputRef.current.focus()
             })
