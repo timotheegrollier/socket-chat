@@ -1,49 +1,61 @@
+// Socket Chat PWA — Service Worker v4
+//
+// Stratégie :
+// - Requêtes de navigation (index.html) : réseau d'abord, pour ne jamais
+//   servir une page HTML en cache avec un CSS obsolète après un deploy.
+// - Assets statiques (CSS, JS, images, icônes, manifest) : cache-first,
+//   pour un chargement rapide et une utilisation hors-ligne partiel.
+
+const CACHE_NAME = 'socket-chat-pwa-v4';
+
 self.addEventListener('install', e => {
-    e.waitUntil(
-      caches.open('socket-chat-pwa-v3').then(cache => {
-        return cache.addAll([
-          '/'
-        ])
-        .then(() => self.skipWaiting());
-      })
-    )
-  };
+  e.waitUntil(self.skipWaiting());
+});
 
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  const isNavigation = request.mode === 'navigate' ||
+    (request.headers.get('Accept') || '').includes('text/html');
 
-  self.addEventListener('fetch', event => {
+  if (isNavigation) {
     event.respondWith(
-      caches.match(event.request).then(response => {
-        return response || fetch(event.request);
-      })
+      fetch(request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(request))
     );
-  });
+    return;
+  }
 
+  event.respondWith(
+    caches.match(request).then(response => {
+      if (response) return response;
+      return fetch(request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+        }
+        return response;
+      });
+    })
+  );
+});
 
-  const deleteCache = async (key) => {
-    await caches.delete(key);
-  };
+const deleteCache = async key => {
+  await caches.delete(key);
+};
 
-  const deleteOldCaches = async () => {
-    const cacheKeepList = ['socket-chat-pwa-v3'];
-    const keyList = await caches.keys();
-    const cachesToDelete = keyList.filter((key) => !cacheKeepList.includes(key));
-    await Promise.all(cachesToDelete.map(deleteCache));
-  };
+const deleteOldCaches = async () => {
+  const keepList = [CACHE_NAME];
+  const keyList = await caches.keys();
+  const toDelete = keyList.filter(k => !keepList.includes(k));
+  await Promise.all(toDelete.map(deleteCache));
+};
 
-
-  // Update a service worker
 self.addEventListener('activate', event => {
-    let cacheWhitelist = ['socket-chat-pwa-v3'];
-    event.waitUntil(deleteOldCaches());
-      event.waitUntil(
-          caches.keys().then(cacheNames => {
-              return Promise.all(
-                  cacheNames.map(cacheName => {
-                      if (cacheWhitelist.indexOf(cacheName) === -1) {
-                          return caches.delete(cacheName);
-                      }
-                  })
-              );
-          })
-      );
+  event.waitUntil(deleteOldCaches());
+  event.waitUntil(self.clients.claim());
 });
