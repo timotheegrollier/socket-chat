@@ -5,7 +5,11 @@
       <stop offset="1" stop-color="#0d1520" />
     </linearGradient>
   </defs>
-  <rect x="4" y="4" width="120" height="120" rx="30.6" fill="url(#tile)" />
-  <rect x="21.3" y="29.9" width="51.2" height="40.7" rx="20.5" fill="#e9edf5" />
-  <polygon points="32.4,70.6 61.4,70.6 46.9,93.9" fill="#5b7cfa" />
+  <rect x="4" y="4" width="120" height="120" rx="23" fill="url(#tile)" />
+  <!-- bulle gauche (moi) -->
+  <rect x="21.3" y="45" width="51.2" height="30" rx="13.5" fill="#e9edf5" />
+  <polygon points="27.4,75 42.7,75 35,85.6" fill="#e9edf5" />
+  <!-- bulle droite (eux) -->
+  <rect x="42.7" y="34" width="51.2" height="30" rx="13.5" fill="#5b7cfa" />
+  <polygon points="100.6,64 85.4,64 93,74.6" fill="#5b7cfa" />
 </svg>
