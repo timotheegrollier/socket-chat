@@ -1,12 +1,13 @@
-// Socket Chat PWA — Service Worker v4
+// Socket Chat PWA — Service Worker v5
 //
 // Stratégie :
-// - Requêtes de navigation (index.html) : réseau d'abord, pour ne jamais
-//   servir une page HTML en cache avec un CSS obsolète après un deploy.
-// - Assets statiques (CSS, JS, images, icônes, manifest) : cache-first,
-//   pour un chargement rapide et une utilisation hors-ligne partiel.
+// - Navigation (index.html) : réseau d'abord, pour ne jamais servir une page
+//   HTML en cache avec un CSS obsolète après un deploy.
+// - Assets statiques same-origin (CSS, JS, images, icônes) : cache-first.
+// - API REST, Socket.IO et requêtes cross-origin : jamais interceptés ni mis
+//   en cache, pour toujours afficher des messages frais.
 
-const CACHE_NAME = 'socket-chat-pwa-v4';
+const CACHE_NAME = 'socket-chat-pwa-v5';
 
 self.addEventListener('install', e => {
   e.waitUntil(self.skipWaiting());
@@ -14,6 +15,15 @@ self.addEventListener('install', e => {
 
 self.addEventListener('fetch', event => {
   const { request } = event;
+
+  // Only same-origin GET requests are cached. The API and socket live on
+  // other origins and must always hit the network.
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/api/') || url.pathname.includes('/socket.io/')) return;
+
   const isNavigation = request.mode === 'navigate' ||
     (request.headers.get('Accept') || '').includes('text/html');
 

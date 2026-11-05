@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.0.1';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.0.2';
 
 const NEW_IN_V2 = [
     {
@@ -55,12 +55,12 @@ const NEW_IN_V2 = [
     {
         icon: '☁️',
         title: 'Cloud-native realtime',
-        text: 'Socket messages now run on Cloudflare Workers with a Durable Object acting as the chat server, next to the static build — cold starts handled.',
+        text: 'The static frontend is hosted on GitHub Pages, while socket messages run on Cloudflare Workers with a Durable Object acting as the chat server — cold starts handled.',
     },
 ];
 
 const TECH = [
-    'React', 'Socket.IO', 'Node.js / Express', 'MongoDB',
+    'React', 'Socket.IO', 'Node.js / Express', 'MongoDB', 'GitHub Pages',
     'Cloudflare Workers + Durable Objects', 'Render', 'SCSS / Bootstrap', 'Continuous deployment',
 ];
 
@@ -116,8 +116,8 @@ const About = () => {
                         and the whole interface has been rebuilt around the conversation instead of a blinking list.
                     </p>
                     <p className="about-sub">
-                        Everything below is live in production — served as a static build on Cloudflare,
-                        with the realtime layer running on the same edge as the users.
+                        Everything below is live in production — the static build is hosted on GitHub Pages,
+                        with the realtime layer running on Cloudflare's edge close to the users.
                         You are currently running <strong>v{APP_VERSION}</strong>.
                     </p>
                     <Link to="/" className="about-cta">Open the chat →</Link>
@@ -139,10 +139,10 @@ const About = () => {
                 <section className="about-section">
                     <h2>Architecture</h2>
                     <p className="about-text">
-                        The React build is deployed on <strong>Cloudflare Workers + Durable Objects</strong>:
-                        assets are served as static files, and a single Durable Object keeps the socket state
-                        — avoiding the polling step entirely. The REST API (Node.js / Express + MongoDB)
-                        runs on Render and is redeployed automatically on each push.
+                        The React build is hosted on <strong>GitHub Pages</strong>, while the realtime layer
+                        runs on <strong>Cloudflare Workers + Durable Objects</strong>: a single Durable Object
+                        keeps the socket state, avoiding the polling step entirely. The REST API
+                        (Node.js / Express + MongoDB) runs on Render and is redeployed automatically on each push.
                     </p>
                     <div className="about-chips">
                         {TECH.map((tech) => (

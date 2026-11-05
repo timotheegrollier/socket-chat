@@ -43,12 +43,12 @@ Use short, imperative subjects, ideally following Conventional Commits:
 feat: add typing indicator
 fix: keep loading state until socket is ready
 docs: document CI/CD pipeline
-chore: bump version to 2.0.1
+chore: bump version to 2.0.2
 ```
 
 ## Versioning
 
-The app version is **2.0.1**. Bump it in:
+The app version is **2.0.2**. Bump it in:
 
 - `package.json`
 - `client/package.json` — injected into the build as `REACT_APP_VERSION` and
