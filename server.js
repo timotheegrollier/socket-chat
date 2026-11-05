@@ -56,6 +56,15 @@ const broadcastPresence = () => {
     io.emit('presence', Array.from(presence, ([id, name]) => ({ id, name })))
 }
 
+const readChannel = (payload) => {
+    const raw = typeof payload === 'string'
+        ? payload
+        : (payload && typeof payload === 'object' ? payload.channel : '')
+    if (typeof raw !== 'string') return ''
+    const name = raw.trim().toLowerCase().replace(/^#/, '')
+    return /^[a-z0-9][a-z0-9-]{0,23}$/.test(name) ? name : ''
+}
+
 
 io.on("connection", (socket) => {
     console.log("Client connected");
@@ -80,21 +89,37 @@ io.on("connection", (socket) => {
         process.exit(0);
     });
 
-    socket.on('newMsg', () => {
-        io.emit('newMsg')
+    socket.on('newMsg', (payload) => {
+        const channel = readChannel(payload)
+        io.emit('newMsg', channel ? { channel } : {})
     })
 
-    socket.on('typing', (name) => {
-        const clean = typeof name === 'string' ? name.slice(0, 12) : ''
-        socket.broadcast.emit('typing', { name: clean })
+    socket.on('channelsChanged', () => {
+        io.emit('channelsChanged')
     })
 
-    socket.on('stopTyping', () => {
-        socket.broadcast.emit('stopTyping')
+    socket.on('channelDeleted', (payload) => {
+        const channel = readChannel(payload)
+        io.emit('channelDeleted', channel ? { channel } : {})
     })
 
-    socket.on('resetTchat', () => {
-        io.emit('reset')
+    socket.on('typing', (payload) => {
+        const name = typeof payload === 'string'
+            ? payload
+            : (payload && typeof payload.name === 'string' ? payload.name : '')
+        const clean = name.slice(0, 12)
+        const channel = readChannel(payload)
+        socket.broadcast.emit('typing', channel ? { name: clean, channel } : { name: clean })
+    })
+
+    socket.on('stopTyping', (payload) => {
+        const channel = readChannel(payload)
+        socket.broadcast.emit('stopTyping', channel ? { channel } : {})
+    })
+
+    socket.on('resetTchat', (payload) => {
+        const channel = readChannel(payload)
+        io.emit('reset', channel ? { channel } : {})
     })
 
     socket.on('count', (count) => {

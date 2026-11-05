@@ -4,9 +4,9 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.0.2** turns the original proof of concept into a usable chat:
-identified messages, typing indicator, unread notifications, a rebuilt interface
-and a cloud-native realtime layer.
+Version **2.1.0** turns the original proof of concept into a usable chat:
+identified messages, typing indicator, unread notifications, a rebuilt interface,
+multiple channels and a cloud-native realtime layer.
 
 **Live:** https://timotheegrollier.github.io/socket-chat/
 
@@ -20,6 +20,7 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 | Feature | Description |
 | --- | --- |
 | Real-time messages | Socket.IO protocol over a WebSocket connection, no polling |
+| Channels | Create a channel inline from the sidebar, switch instantly, delete it with its history; messages and search are scoped per channel |
 | Author & timestamps | Every message carries its author (pseudo), author id and creation date |
 | Typing indicator | `typing` / `stopTyping` events broadcast to everyone else in the room |
 | Online presence | A live sidebar lists everyone connected under their pseudo (`join` + `presence` events) |
@@ -194,16 +195,19 @@ events:
 | Event | Payload | Server behaviour |
 | --- | --- | --- |
 | `join` | `name: string` or `{ name }` | Registers the pseudo and broadcasts the updated `presence` list |
-| `newMsg` | — | Broadcasts `newMsg` to everyone |
-| `resetTchat` | — | Broadcasts `reset` to everyone |
-| `typing` | `name: string` | Broadcasts `typing` `{ name }` to everyone **except the sender** |
-| `stopTyping` | — | Broadcasts `stopTyping` to everyone except the sender |
+| `newMsg` | `{ channel }` | Broadcasts `newMsg` `{ channel }` to everyone |
+| `channelsChanged` | — | Broadcasts `channelsChanged` to everyone |
+| `channelDeleted` | `{ channel }` | Broadcasts `channelDeleted` `{ channel }` to everyone |
+| `resetTchat` | `{ channel }` | Broadcasts `reset` `{ channel }` to everyone |
+| `typing` | `{ name, channel }` | Broadcasts `typing` `{ name, channel }` to everyone **except the sender** |
+| `stopTyping` | `{ channel }` | Broadcasts `stopTyping` `{ channel }` to everyone except the sender |
 | `join-room` | `{ roomId, name }` | Joins a WebRTC signalling room |
 | `offer` / `answer` / `ice-candidate` | `{ target, ... }` | Targeted signalling relay |
 | `relay-data` | `{ target, data, meta }` | Targeted relay (text or binary) |
 
-Server → client: `count`, `presence`, `newMsg`, `reset`, `refreshCount`, `typing`,
-`stopTyping`, `room-users`, `user-joined`, `user-left`, `relay-data`.
+Server → client: `count`, `presence`, `newMsg`, `channelsChanged`,
+`channelDeleted`, `reset`, `refreshCount`, `typing`, `stopTyping`, `room-users`,
+`user-joined`, `user-left`, `relay-data`.
 
 `presence` is an array of `{ id, name }`, recalculated on connect, `join` and
 disconnect.
@@ -211,7 +215,7 @@ disconnect.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.0.2", "timestamp": "..." }
+{ "status": "ok", "version": "2.1.0", "timestamp": "..." }
 ```
 
 ---
@@ -223,10 +227,13 @@ disconnect.
 | `POST` | `/api/secure/signup` | Create an account (pseudo, password, confirmPass, terms) |
 | `POST` | `/api/secure/login` | Returns `{ userId, token }` (JWT, 24 h) |
 | `GET` | `/api/secure/:id` | Returns the user (pseudo) |
-| `GET` | `/api/messages` | List all messages (`message`, `author`, `authorId`, `createdAt`) |
-| `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId }` |
+| `GET` | `/api/channels` | List channels (`general` is always present) |
+| `POST` | `/api/channels/new` | Create a channel — `{ name }` (1-24 lowercase letters, numbers or hyphens) |
+| `DELETE` | `/api/channels/:name` | Delete a channel and all its messages (`general` is protected) |
+| `GET` | `/api/messages?channel=general` | List messages for a channel (`message`, `author`, `authorId`, `channel`, `createdAt`) |
+| `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId, channel }` |
 | `DELETE` | `/api/messages/:id` | Delete a message — `{ authorId }` must match the message owner |
-| `DELETE` | `/api/messages` | Delete all messages (chat reset) |
+| `DELETE` | `/api/messages?channel=general` | Delete all messages in a channel (chat reset) |
 
 ---
 
@@ -294,7 +301,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.0.2**. It is displayed on the About page and in the
+The current version is **2.1.0**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and

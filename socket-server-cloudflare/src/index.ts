@@ -28,6 +28,19 @@ interface Client {
 const PING_INTERVAL_MS = 25_000;
 const MAX_ROOM_LENGTH = 64;
 const MAX_NAME_LENGTH = 64;
+const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
+
+const readChannel = (payload: unknown): string => {
+  let raw: unknown;
+  if (typeof payload === 'string') {
+    raw = payload;
+  } else if (payload && typeof payload === 'object') {
+    raw = (payload as { channel?: unknown }).channel;
+  }
+  if (typeof raw !== 'string') return '';
+  const name = raw.trim().toLowerCase().replace(/^#/, '');
+  return CHANNEL_PATTERN.test(name) ? name : '';
+};
 
 // The chat frontend origin and local development origins. Add any custom
 // frontend domain here before deploying it.
@@ -276,7 +289,19 @@ export class ChatRoom {
     }
 
     if (eventName === 'newMsg') {
-      this.broadcastToAll('newMsg', {});
+      const channel = readChannel(payload);
+      this.broadcastToAll('newMsg', channel ? { channel } : {});
+      return;
+    }
+
+    if (eventName === 'channelsChanged') {
+      this.broadcastToAll('channelsChanged', {});
+      return;
+    }
+
+    if (eventName === 'channelDeleted') {
+      const channel = readChannel(payload);
+      this.broadcastToAll('channelDeleted', channel ? { channel } : {});
       return;
     }
 
@@ -286,7 +311,8 @@ export class ChatRoom {
     }
 
     if (eventName === 'resetTchat') {
-      this.broadcastToAll('reset', {});
+      const channel = readChannel(payload);
+      this.broadcastToAll('reset', channel ? { channel } : {});
       return;
     }
 
@@ -384,7 +410,8 @@ export class ChatRoom {
         name = raw.trim().slice(0, MAX_NAME_LENGTH);
       }
     }
-    this.broadcastExcept(client.id, eventName, { name });
+    const channel = readChannel(payload);
+    this.broadcastExcept(client.id, eventName, channel ? { name, channel } : { name });
   }
 
   private handleRelayText(client: Client, payload: unknown): void {    if (!payload || typeof payload !== 'object') return;

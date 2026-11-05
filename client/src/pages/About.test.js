@@ -13,6 +13,6 @@ test('announces version 2.0 and displays the current build version', () => {
   const escaped = version.replace(/\./g, '\\.');
   const versionLabels = screen.getAllByText(new RegExp(`version ${escaped}`, 'i'));
   expect(versionLabels.length).toBeGreaterThan(0);
-  expect(screen.getByText(/what's new in 2\.0/i)).toBeInTheDocument();
+  expect(screen.getByText(/what's new in 2\.x/i)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /open the chat/i })).toBeInTheDocument();
 });

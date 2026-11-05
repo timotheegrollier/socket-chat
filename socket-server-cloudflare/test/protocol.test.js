@@ -72,15 +72,26 @@ async function main() {
   await aliceJoined;
 
   const newMsgPromise = waitFor(alice, 'newMsg');
-  alice.emit('newMsg', {});
+  alice.emit('newMsg', { channel: 'general' });
   const [newMsg] = await newMsgPromise;
-  if (!newMsg) throw new Error('newMsg payload mismatch');
+  if (!newMsg || newMsg.channel !== 'general') throw new Error('newMsg payload mismatch');
   console.log('newMsg ok');
 
+  const channelsChangedPromise = waitFor(alice, 'channelsChanged');
+  alice.emit('channelsChanged', {});
+  await channelsChangedPromise;
+  console.log('channelsChanged ok');
+
+  const channelDeletedPromise = waitFor(alice, 'channelDeleted');
+  alice.emit('channelDeleted', { channel: 'ops' });
+  const [deleted] = await channelDeletedPromise;
+  if (!deleted || deleted.channel !== 'ops') throw new Error('channelDeleted payload mismatch');
+  console.log('channelDeleted ok');
+
   const resetPromise = waitFor(alice, 'reset');
-  alice.emit('resetTchat', {});
+  alice.emit('resetTchat', { channel: 'general' });
   const [reset] = await resetPromise;
-  if (!reset) throw new Error('reset payload mismatch');
+  if (!reset || reset.channel !== 'general') throw new Error('reset payload mismatch');
   console.log('reset ok');
 
   const bob = await makeSocket();
@@ -97,14 +108,17 @@ async function main() {
   console.log('presence ok');
 
   const typingPromise = waitFor(bob, 'typing');
-  alice.emit('typing', 'alice');
+  alice.emit('typing', { name: 'alice', channel: 'general' });
   const [typing] = await typingPromise;
-  if (!typing || typing.name !== 'alice') throw new Error('typing payload mismatch');
+  if (!typing || typing.name !== 'alice' || typing.channel !== 'general') {
+    throw new Error('typing payload mismatch');
+  }
   console.log('typing ok');
 
   const stopTypingPromise = waitFor(bob, 'stopTyping');
-  alice.emit('stopTyping', {});
-  await stopTypingPromise;
+  alice.emit('stopTyping', { channel: 'general' });
+  const [stopped] = await stopTypingPromise;
+  if (!stopped || stopped.channel !== 'general') throw new Error('stopTyping payload mismatch');
   console.log('stopTyping ok');
 
   bob.disconnect();
