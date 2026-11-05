@@ -1,13 +1,13 @@
 self.addEventListener('install', e => {
     e.waitUntil(
-      caches.open('pwa').then(cache => {
+      caches.open('socket-chat-pwa-v3').then(cache => {
         return cache.addAll([
           '/'
         ])
         .then(() => self.skipWaiting());
       })
     )
-  });
+  };
 
 
   self.addEventListener('fetch', event => {
@@ -24,7 +24,7 @@ self.addEventListener('install', e => {
   };
 
   const deleteOldCaches = async () => {
-    const cacheKeepList = ["pwa"];
+    const cacheKeepList = ['socket-chat-pwa-v3'];
     const keyList = await caches.keys();
     const cachesToDelete = keyList.filter((key) => !cacheKeepList.includes(key));
     await Promise.all(cachesToDelete.map(deleteCache));
@@ -33,7 +33,7 @@ self.addEventListener('install', e => {
 
   // Update a service worker
 self.addEventListener('activate', event => {
-    let cacheWhitelist = ['pwa'];
+    let cacheWhitelist = ['socket-chat-pwa-v3'];
     event.waitUntil(deleteOldCaches());
       event.waitUntil(
           caches.keys().then(cacheNames => {
@@ -46,4 +46,4 @@ self.addEventListener('activate', event => {
               );
           })
       );
-  });
+});

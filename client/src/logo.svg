@@ -5,7 +5,7 @@
       <stop offset="1" stop-color="#0d1520" />
     </linearGradient>
   </defs>
-  <rect x="4" y="4" width="120" height="120" rx="30.6" fill="url(#tile)" stroke="#2b3446" stroke-width="4.5" />
-  <rect x="23.8" y="34.1" width="51.2" height="40.9" rx="20.5" fill="#e9edf5" />
-  <polygon points="35,74.9 67.2,74.9 51.2,97.3" fill="#5b7cfa" />
+  <rect x="4" y="4" width="120" height="120" rx="30.6" fill="url(#tile)" />
+  <rect x="21.3" y="29.9" width="51.2" height="40.7" rx="20.5" fill="#e9edf5" />
+  <polygon points="32.4,70.6 61.4,70.6 46.9,93.9" fill="#5b7cfa" />
 </svg>
