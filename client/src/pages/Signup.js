@@ -41,6 +41,8 @@ const Signup = () => {
                     expiry: new Date().getTime() + 86400000
                 }
                 localStorage.setItem('JWT', JSON.stringify(userConnected))
+                // Keep the pseudo available before the first profile fetch.
+                localStorage.setItem('socket-chat-username', res.data.pseudo || user.pseudo)
                 navigate('/')
             })
             .catch(error => {

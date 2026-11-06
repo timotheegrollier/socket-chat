@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.0';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.1';
 
 const NEW_IN_V2 = [
     {
@@ -16,6 +16,11 @@ const NEW_IN_V2 = [
         icon: '📶',
         title: 'Resilient connection',
         text: 'Lock your phone or switch apps? The chat pauses quietly, reconnects as soon as you return, syncs the messages missed while away and keeps your place.',
+    },
+    {
+        icon: '🪪',
+        title: 'Reliable identity',
+        text: 'Your pseudo is cached at login and confirmed by the server, so your messages are never stored as Anonymous — even right after a reload or on a slow network.',
     },
     {
         icon: '⚡',
@@ -123,9 +128,10 @@ const About = () => {
                         Socket Chat started as a training project to learn real-time systems.
                         Version 1 proved the concept; version 2 makes it <strong>actually useful</strong>:
                         messages now carry their author and a timestamp, the connection starts instantly,
-                        channels keep conversations organised, and the chat reconnects seamlessly
-                        after a phone lock or a network drop. The whole interface has been rebuilt
-                        around the conversation instead of a blinking list.
+                        channels keep conversations organised, the chat reconnects seamlessly
+                        after a phone lock or a network drop, and your pseudo stays attached to
+                        everything you send. The whole interface has been rebuilt around the
+                        conversation instead of a blinking list.
                     </p>
                     <p className="about-sub">
                         Everything below is live in production — the static build is hosted on GitHub Pages,
@@ -180,7 +186,7 @@ const About = () => {
                         This project remains a training playground — the goal is to learn real-time
                         systems, cloud hosting and continuous delivery, one version at a time.
                     </p>
-                    <p className="about-footer-note">Socket Chat · v1 launched the chat · v2.0 made it a conversation · v2.1 added channels · v2.2 keeps it connected.</p>
+                    <p className="about-footer-note">Socket Chat · v1 launched the chat · v2.0 made it a conversation · v2.1 added channels · v2.2 keeps it connected and identified.</p>
                 </footer>
 
             </div>

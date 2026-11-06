@@ -24,7 +24,8 @@ export default class Login extends Component {
         }
         this.setState({ submitting: true, loginError: "" })
         axios.post(config.api_url + '/api/secure/login', userCredentials).then((res) => {
-            this.storeUser(res.data.token, res.data.userId).then(() => {
+            const pseudo = (res.data && res.data.pseudo) || userCredentials.pseudo
+            this.storeUser(res.data.token, res.data.userId, pseudo).then(() => {
                 this.setState({ submitting: false })
                 this.getLogged(true)
             })
@@ -36,13 +37,16 @@ export default class Login extends Component {
         })
     }
 
-    async storeUser(token, userId) {
+    async storeUser(token, userId, pseudo) {
         const userConnected = {
             token: token,
             userId: userId,
             expiry: new Date().getTime() + 86400000
         }
         localStorage.setItem('JWT', JSON.stringify(userConnected))
+        // Cache the pseudo so the chat can send messages immediately, even
+        // before the profile request finishes (or if it fails).
+        if (pseudo) localStorage.setItem('socket-chat-username', pseudo)
     }
 
     render() {

@@ -6,7 +6,8 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.0';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.1';
+const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -130,6 +131,7 @@ const Home = () => {
     const activeChannelRef = useRef(activeChannel)
     const messagesRequestRef = useRef(0)
     const userRef = useRef()
+    const profileLoadingRef = useRef(false)
     const syncTimerRef = useRef()
     const reconnectGuardRef = useRef(0)
     const everConnectedRef = useRef(false)
@@ -147,6 +149,7 @@ const Home = () => {
         } else {
             setConnected(false)
             localStorage.removeItem("JWT")
+            localStorage.removeItem(USERNAME_KEY)
         }
 
         return () => {
@@ -227,8 +230,8 @@ const Home = () => {
     }, []);
 
     useEffect(() => {
-        if (socketReady && socketRef.current) {
-            socketRef.current.emit('join', (user && user.username) || 'Anonymous')
+        if (socketReady && socketRef.current && user && user.username) {
+            socketRef.current.emit('join', user.username)
         }
     }, [socketReady, user]);
 
@@ -382,27 +385,60 @@ const Home = () => {
     const getLogged = async (isConnected) => {
         setupSocket()
         setConnected(isConnected)
+        loadProfile()
         const list = await fetchChannels() || [{ name: 'general', createdAt: null }]
         const wanted = activeChannelRef.current || 'general'
         const channel = list.some((item) => item.name === wanted) ? wanted : 'general'
         activeChannelRef.current = channel
         setActiveChannel(channel)
         fetchMessages(channel, true)
-        getUsername().then((username) => {
-            setUser({
-                userId: JSON.parse(localStorage.getItem('JWT')).userId,
-                JWT: JSON.parse(localStorage.getItem('JWT')).token,
-                username: username
-            })
-        })
+    }
+
+    const applyProfile = (username) => {
+        const clean = (username || '').trim().slice(0, 12)
+        if (!clean) return false
+        let auth = null
+        try {
+            auth = JSON.parse(localStorage.getItem('JWT'))
+        } catch (error) {
+            auth = null
+        }
+        const profile = {
+            userId: auth ? auth.userId : null,
+            JWT: auth ? auth.token : null,
+            username: clean
+        }
+        localStorage.setItem(USERNAME_KEY, clean)
+        userRef.current = profile
+        setUser(profile)
+        return true
     }
 
     const getUsername = async () => {
-        let username = "";
-        await axios.get(config.api_url + '/api/secure/' + JSON.parse(localStorage.getItem('JWT')).userId).then((res) => {
-            username = res.data.user.pseudo
-        })
-        return username
+        try {
+            const auth = JSON.parse(localStorage.getItem('JWT'))
+            const res = await axios.get(config.api_url + '/api/secure/' + auth.userId)
+            return res.data && res.data.user && typeof res.data.user.pseudo === 'string'
+                ? res.data.user.pseudo
+                : ''
+        } catch (error) {
+            // Offline or transient API failure: keep the cached pseudo.
+            return ''
+        }
+    }
+
+    const loadProfile = async () => {
+        const cached = localStorage.getItem(USERNAME_KEY) || ''
+        if (cached) applyProfile(cached)
+        if (profileLoadingRef.current) return cached
+        profileLoadingRef.current = true
+        try {
+            const username = await getUsername()
+            if (username) applyProfile(username)
+            return username || cached
+        } finally {
+            profileLoadingRef.current = false
+        }
     }
 
     const fetchChannels = async () => {
@@ -492,7 +528,10 @@ const Home = () => {
         syncTimerRef.current = setTimeout(() => {
             const socket = socketRef.current
             if (!socket || !socket.connected) return
-            socket.emit('join', (userRef.current && userRef.current.username) || 'Anonymous')
+            if (!userRef.current || !userRef.current.username) loadProfile()
+            if (userRef.current && userRef.current.username) {
+                socket.emit('join', userRef.current.username)
+            }
             fetchChannels().then((list) => {
                 if (list && !list.some((channel) => channel.name === activeChannelRef.current)) {
                     changeChannel('general')
@@ -580,7 +619,8 @@ const Home = () => {
 
     const notifyTyping = () => {
         if (!socketRef.current || !socketReady) return
-        const name = (user && user.username) || 'Anonymous'
+        const name = (userRef.current && userRef.current.username) || ''
+        if (!name) return
         socketRef.current.emit('typing', { name, channel: activeChannelRef.current || 'general' })
         clearTimeout(typingTimerRef.current)
         typingTimerRef.current = setTimeout(() => stopTyping(), 2000)
@@ -628,8 +668,17 @@ const Home = () => {
             return
         }
 
+        const author = (userRef.current && userRef.current.username) || ''
+        if (!author) {
+            // Never store a message under "Anonymous" just because the profile
+            // request has not finished yet. Retry it so an eventual second
+            // attempt can succeed even if the first fetch failed.
+            loadProfile()
+            pushToast('Your profile is still loading — try again in a moment.', 'warning')
+            return
+        }
+
         const text = value.slice(0, MAX_MESSAGE_LENGTH)
-        const author = (user && user.username) || 'Anonymous'
         const channel = activeChannelRef.current || 'general'
         const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
         const optimistic = {

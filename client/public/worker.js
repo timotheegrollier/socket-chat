@@ -1,4 +1,4 @@
-// Socket Chat PWA — Service Worker v6
+// Socket Chat PWA — Service Worker v7
 //
 // Stratégie :
 // - Navigation (index.html) : réseau d'abord, pour ne jamais servir une page
@@ -7,7 +7,7 @@
 // - API REST, Socket.IO et requêtes cross-origin : jamais interceptés ni mis
 //   en cache, pour toujours afficher des messages frais.
 
-const CACHE_NAME = 'socket-chat-pwa-v6';
+const CACHE_NAME = 'socket-chat-pwa-v7';
 
 self.addEventListener('install', e => {
   e.waitUntil(self.skipWaiting());

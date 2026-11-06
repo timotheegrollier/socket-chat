@@ -5,6 +5,7 @@ class Nav extends Component {
     handleLogout(e) {
         e.preventDefault()
         localStorage.removeItem("JWT")
+        localStorage.removeItem("socket-chat-username")
         window.location.reload()
     }
 

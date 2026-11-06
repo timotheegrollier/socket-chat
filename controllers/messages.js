@@ -1,6 +1,8 @@
 const Message = require('../models/chatMessage')
+const User = require('../models/tchatUser')
 
 const DEFAULT_CHANNEL = 'general'
+const OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/
 
 const normalizeChannel = (value) => {
@@ -27,8 +29,23 @@ exports.newMessage = (req, res, next) => {
     const authorId = typeof req.body.authorId === 'string' ? req.body.authorId.trim().slice(0, 64) : '';
     const channel = normalizeChannel(req.body.channel)
 
-    let newMessage = new Message({ message, author: author || 'Anonymous', authorId, channel })
-    newMessage.save()
+    // The stored pseudo is authoritative: the client may still be loading the
+    // profile, and old clients may send "Anonymous". Resolve the author from
+    // the user id whenever it points to a real account.
+    const resolveAuthor = () => {
+        if (!authorId || !OBJECT_ID_PATTERN.test(authorId)) {
+            return Promise.resolve(author || 'Anonymous')
+        }
+        return User.findById(authorId)
+            .then((user) => (user && user.pseudo ? user.pseudo : author || 'Anonymous'))
+            .catch(() => author || 'Anonymous')
+    }
+
+    resolveAuthor()
+        .then((resolvedAuthor) => {
+            const newMessage = new Message({ message, author: resolvedAuthor, authorId, channel })
+            return newMessage.save()
+        })
         .then((msg) => res.status(200).json({ msg }))
         .catch((err) => res.status(400).json({ err }))
 }
