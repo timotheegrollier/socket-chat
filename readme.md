@@ -4,10 +4,10 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.2.0** turns the original proof of concept into a usable chat:
+Version **2.2.1** turns the original proof of concept into a usable chat:
 identified messages, typing indicator, unread notifications, a rebuilt interface,
-multiple channels, a cloud-native realtime layer and a connection that survives
-phone locks and network drops.
+multiple channels, a cloud-native realtime layer, a connection that survives
+phone locks and network drops, and a pseudo that stays attached to every message.
 
 **Live:** https://timotheegrollier.github.io/socket-chat/
 
@@ -23,6 +23,7 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 | Real-time messages | Socket.IO protocol over a WebSocket connection, no polling |
 | Channels | Create a channel inline from the sidebar, switch instantly, delete it with its history; messages and search are scoped per channel |
 | Author & timestamps | Every message carries its author (pseudo), author id and creation date |
+| Reliable identity | The pseudo is cached at login, applied before the profile request finishes, and resolved from the account on the server — messages are never stored as Anonymous |
 | Typing indicator | `typing` / `stopTyping` events broadcast to everyone else in the room |
 | Online presence | A live sidebar lists everyone connected under their pseudo (`join` + `presence` events) |
 | Online counter | The Durable Object tracks connected clients and broadcasts `count` |
@@ -223,7 +224,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.2.0", "timestamp": "..." }
+{ "status": "ok", "version": "2.2.1", "timestamp": "..." }
 ```
 
 ---
@@ -233,13 +234,13 @@ active channel, so messages sent while the page was frozen are not lost.
 | Method | Route | Description |
 | --- | --- | --- |
 | `POST` | `/api/secure/signup` | Create an account (pseudo, password, confirmPass, terms) |
-| `POST` | `/api/secure/login` | Returns `{ userId, token }` (JWT, 24 h) |
+| `POST` | `/api/secure/login` | Returns `{ userId, pseudo, token }` (JWT, 24 h) |
 | `GET` | `/api/secure/:id` | Returns the user (pseudo) |
 | `GET` | `/api/channels` | List channels (`general` is always present) |
 | `POST` | `/api/channels/new` | Create a channel — `{ name }` (1-24 lowercase letters, numbers or hyphens) |
 | `DELETE` | `/api/channels/:name` | Delete a channel and all its messages (`general` is protected) |
 | `GET` | `/api/messages?channel=general` | List messages for a channel (`message`, `author`, `authorId`, `channel`, `createdAt`) |
-| `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId, channel }` |
+| `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId, channel }`; when `authorId` matches an account, the stored pseudo overrides `author` |
 | `DELETE` | `/api/messages/:id` | Delete a message — `{ authorId }` must match the message owner |
 | `DELETE` | `/api/messages?channel=general` | Delete all messages in a channel (chat reset) |
 
@@ -309,7 +310,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.2.0**. It is displayed on the About page and in the
+The current version is **2.2.1**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and
