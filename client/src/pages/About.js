@@ -4,13 +4,18 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.1.0';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.0';
 
 const NEW_IN_V2 = [
     {
         icon: '💬',
         title: 'Channels',
         text: 'Create a channel straight from the sidebar, switch in one click, and delete it with its whole history. Messages and search are scoped to the active channel.',
+    },
+    {
+        icon: '📶',
+        title: 'Resilient connection',
+        text: 'Lock your phone or switch apps? The chat pauses quietly, reconnects as soon as you return, syncs the messages missed while away and keeps your place.',
     },
     {
         icon: '⚡',
@@ -118,7 +123,8 @@ const About = () => {
                         Socket Chat started as a training project to learn real-time systems.
                         Version 1 proved the concept; version 2 makes it <strong>actually useful</strong>:
                         messages now carry their author and a timestamp, the connection starts instantly,
-                        channels keep conversations organised, and the whole interface has been rebuilt
+                        channels keep conversations organised, and the chat reconnects seamlessly
+                        after a phone lock or a network drop. The whole interface has been rebuilt
                         around the conversation instead of a blinking list.
                     </p>
                     <p className="about-sub">
@@ -174,7 +180,7 @@ const About = () => {
                         This project remains a training playground — the goal is to learn real-time
                         systems, cloud hosting and continuous delivery, one version at a time.
                     </p>
-                    <p className="about-footer-note">Socket Chat · v1 launched the chat · v2.0 made it a conversation · v2.1 added channels.</p>
+                    <p className="about-footer-note">Socket Chat · v1 launched the chat · v2.0 made it a conversation · v2.1 added channels · v2.2 keeps it connected.</p>
                 </footer>
 
             </div>

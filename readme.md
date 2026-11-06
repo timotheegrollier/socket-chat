@@ -4,9 +4,10 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.1.0** turns the original proof of concept into a usable chat:
+Version **2.2.0** turns the original proof of concept into a usable chat:
 identified messages, typing indicator, unread notifications, a rebuilt interface,
-multiple channels and a cloud-native realtime layer.
+multiple channels, a cloud-native realtime layer and a connection that survives
+phone locks and network drops.
 
 **Live:** https://timotheegrollier.github.io/socket-chat/
 
@@ -26,12 +27,14 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 | Online presence | A live sidebar lists everyone connected under their pseudo (`join` + `presence` events) |
 | Online counter | The Durable Object tracks connected clients and broadcasts `count` |
 | Unread badge | The tab title shows `(N) new message(s)` while the page is hidden |
+| Connection resilience | Screen lock, app switch or network drop: the status pill switches to Paused/Reconnecting, the socket reconnects immediately on return, missed messages are fetched and your channel is preserved |
+| Connection feedback | A compact status pill (Live / Connecting / Reconnecting / Offline / Paused), a contextual banner with a Retry button and a "Back online" toast instead of an alarming error |
 | Message tools | Copy any message, delete your own (`DELETE /api/messages/:id`), local search across the conversation |
 | Conversation timeline | Consecutive messages from the same author are grouped (5 min window) with day separators |
 | Smart scrolling | New messages do not yank the view while you read history; a "New messages" pill jumps back |
 | Multi-line composer | Auto-growing textarea — Enter sends, Shift+Enter adds a new line |
 | Emoji picker | Quick reactions appended to the composer |
-| Toasts | Lightweight feedback for copy, delete, reset and connection errors |
+| Toasts | Lightweight feedback for copy, delete, reset and reconnect events |
 | Input limits | 500 characters max, live counter, validated on client **and** server |
 | Auth | Signup / login with bcrypt + JWT (24 h), stored in `localStorage` |
 | Chat reset | `/delete` command clears all messages for every connected client |
@@ -212,10 +215,15 @@ Server → client: `count`, `presence`, `newMsg`, `channelsChanged`,
 `presence` is an array of `{ id, name }`, recalculated on connect, `join` and
 disconnect.
 
+The Worker sends a heartbeat every **25 s** and tolerates **60 s** of silence,
+which covers short phone screen locks. When the browser is visible again (or the
+network returns), the client immediately opens a fresh socket and re-fetches the
+active channel, so messages sent while the page was frozen are not lost.
+
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.1.0", "timestamp": "..." }
+{ "status": "ok", "version": "2.2.0", "timestamp": "..." }
 ```
 
 ---
@@ -256,8 +264,8 @@ SOCKET_URL=http://127.0.0.1:8787 npm run test:protocol
 ```
 
 The protocol suite covers the health endpoint, connection count, `newMsg`,
-`reset`, the presence list (`join` / `presence`), the typing indicator between
-two clients, and `stopTyping`.
+`channelsChanged`, `channelDeleted`, `reset`, the presence list (`join` /
+`presence`), the typing indicator between two clients, and `stopTyping`.
 
 ---
 
@@ -301,7 +309,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.1.0**. It is displayed on the About page and in the
+The current version is **2.2.0**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and

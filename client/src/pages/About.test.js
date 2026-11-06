@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import About from './About';
 import { version } from '../../package.json';
 
-test('announces version 2.0 and displays the current build version', () => {
+test('announces version 2.x and displays the current build version', () => {
   render(
     <MemoryRouter initialEntries={['/about']}>
       <About />
