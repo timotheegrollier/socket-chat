@@ -48,7 +48,7 @@ const sslServer = https.createServer({key: fs.readFileSync('./privkey.pem'),    
 
 
 // SOCKET
-var io = require('socket.io')(server);
+var io = require('socket.io')(server, { pingInterval: 25000, pingTimeout: 60000 });
 let userCount = 0
 const presence = new Map()
 

@@ -6,11 +6,23 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.1.0';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.0';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const AVATAR_PALETTE = ['#5b7cfa', '#7a6ff0', '#4f9cf9', '#43b3a8', '#d7746b', '#c98a4b', '#8f7ec9', '#5fa06f'];
+const RECONNECT_DELAY_MS = 500;
+const RECONNECT_DELAY_MAX_MS = 5000;
+// After a long screen lock / app switch, force a fresh socket instead of
+// trusting a connection the OS may have silently frozen.
+const RESUME_RECONNECT_MS = 15000;
+const CONNECTION_LABELS = {
+    connecting: 'Connecting',
+    live: 'Live',
+    reconnecting: 'Reconnecting',
+    offline: 'Offline',
+    paused: 'Paused',
+};
 
 const initials = (name) => (name || '?').trim().charAt(0).toUpperCase();
 
@@ -88,6 +100,8 @@ const Home = () => {
     const [userCount, setUserCount] = useStateIfMounted()
     const [socketReady, setSocketReady] = useStateIfMounted(false)
     const [socketId, setSocketId] = useStateIfMounted(null)
+    const [connectionState, setConnectionState] = useStateIfMounted('connecting')
+    const [reconnectAttempt, setReconnectAttempt] = useStateIfMounted(0)
     const [onlineUsers, setOnlineUsers] = useStateIfMounted([])
     const [user, setUser] = useStateIfMounted()
     const [connected, setConnected] = useStateIfMounted(false)
@@ -115,6 +129,13 @@ const Home = () => {
     const channelInputRef = useRef()
     const activeChannelRef = useRef(activeChannel)
     const messagesRequestRef = useRef(0)
+    const userRef = useRef()
+    const syncTimerRef = useRef()
+    const reconnectGuardRef = useRef(0)
+    const everConnectedRef = useRef(false)
+    const initialConnectFailedRef = useRef(false)
+    const disconnectedAtRef = useRef(0)
+    const hiddenAtRef = useRef(0)
 
     const config = require('../config.json')
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -134,6 +155,7 @@ const Home = () => {
                 socketRef.current = null;
             }
             clearTimeout(typingTimerRef.current)
+            clearTimeout(syncTimerRef.current)
         };
         // eslint-disable-next-line
     }, []);
@@ -154,14 +176,52 @@ const Home = () => {
     }, [creatingChannel]);
 
     useEffect(() => {
-        const clearUnread = () => {
-            if (!document.hidden) setUnread(0)
+        userRef.current = user
+    }, [user]);
+
+    useEffect(() => {
+        const onVisibilityChange = () => {
+            if (document.hidden) {
+                hiddenAtRef.current = Date.now()
+                stopTyping()
+                setConnectionState((current) => {
+                    if (typeof navigator !== 'undefined' && !navigator.onLine) return 'offline'
+                    return current === 'live' ? 'paused' : current
+                })
+                return
+            }
+            setUnread(0)
+            resumeRealtime()
         }
-        document.addEventListener('visibilitychange', clearUnread)
-        window.addEventListener('focus', clearUnread)
+
+        const onOnline = () => {
+            if (!document.hidden) reconnectNow()
+        }
+
+        const onOffline = () => {
+            setTypingName('')
+            setConnectionState('offline')
+        }
+
+        const onFocus = () => {
+            if (!document.hidden) resumeRealtime()
+        }
+
+        const onPageShow = () => {
+            if (!document.hidden) resumeRealtime()
+        }
+
+        document.addEventListener('visibilitychange', onVisibilityChange)
+        window.addEventListener('online', onOnline)
+        window.addEventListener('offline', onOffline)
+        window.addEventListener('focus', onFocus)
+        window.addEventListener('pageshow', onPageShow)
         return () => {
-            document.removeEventListener('visibilitychange', clearUnread)
-            window.removeEventListener('focus', clearUnread)
+            document.removeEventListener('visibilitychange', onVisibilityChange)
+            window.removeEventListener('online', onOnline)
+            window.removeEventListener('offline', onOffline)
+            window.removeEventListener('focus', onFocus)
+            window.removeEventListener('pageshow', onPageShow)
         }
         // eslint-disable-next-line
     }, []);
@@ -211,19 +271,73 @@ const Home = () => {
 
         const socket = socketIOClient(config.socket_url, {
             transports: ['websocket'],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: RECONNECT_DELAY_MS,
+            reconnectionDelayMax: RECONNECT_DELAY_MAX_MS,
+            randomizationFactor: 0.4,
+            timeout: 12000,
         })
         socketRef.current = socket
 
+        socket.io.on('reconnect_attempt', (attempt) => {
+            setReconnectAttempt(attempt)
+            if (!document.hidden && (typeof navigator === 'undefined' || navigator.onLine)) {
+                setConnectionState('reconnecting')
+            }
+        })
+        socket.io.on('reconnect_error', () => {
+            if (!document.hidden && (typeof navigator === 'undefined' || navigator.onLine)) {
+                setConnectionState('reconnecting')
+            }
+        })
+
         socket.on("connect", () => {
+            const wasConnected = everConnectedRef.current
+            const outage = wasConnected && disconnectedAtRef.current &&
+                Date.now() - disconnectedAtRef.current > 1500
+            everConnectedRef.current = true
+            initialConnectFailedRef.current = false
+            disconnectedAtRef.current = 0
             setSocketReady(true)
             setSocketId(socket.id)
+            setConnectionState('live')
+            setReconnectAttempt(0)
+            if (wasConnected) {
+                scheduleSync(150)
+                if (outage && !document.hidden) {
+                    pushToast('Back online — syncing messages…', 'success')
+                }
+            }
         })
-        socket.on("disconnect", () => {
+        socket.on("disconnect", (reason) => {
             setSocketReady(false)
             setTypingName('')
+            if (!disconnectedAtRef.current) disconnectedAtRef.current = Date.now()
+            if (reason === 'io client disconnect') return
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                setConnectionState('offline')
+                return
+            }
+            if (document.hidden) {
+                setConnectionState('paused')
+                return
+            }
+            setConnectionState('reconnecting')
+            if (reason === 'io server disconnect') {
+                socket.connect()
+            }
         })
         socket.on("connect_error", () => {
+            initialConnectFailedRef.current = true
             setSocketReady(false)
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                setConnectionState('offline')
+            } else if (document.hidden) {
+                setConnectionState('paused')
+            } else {
+                setConnectionState('reconnecting')
+            }
         })
 
         socket.on("newMsg", (data) => {
@@ -268,7 +382,7 @@ const Home = () => {
     const getLogged = async (isConnected) => {
         setupSocket()
         setConnected(isConnected)
-        const list = await fetchChannels()
+        const list = await fetchChannels() || [{ name: 'general', createdAt: null }]
         const wanted = activeChannelRef.current || 'general'
         const channel = list.some((item) => item.name === wanted) ? wanted : 'general'
         activeChannelRef.current = channel
@@ -302,15 +416,18 @@ const Home = () => {
             setChannels(sorted)
             return sorted
         } catch (error) {
-            const fallback = [{ name: 'general', createdAt: null }]
-            setChannels(fallback)
-            return fallback
+            // Keep the channels already on screen during a network blip;
+            // only seed #general when nothing has loaded yet.
+            setChannels((current) => (current && current.length)
+                ? current
+                : [{ name: 'general', createdAt: null }])
+            return null
         }
     }
 
     const refreshChannels = async () => {
         const list = await fetchChannels()
-        if (!list.some((channel) => channel.name === activeChannelRef.current)) {
+        if (list && !list.some((channel) => channel.name === activeChannelRef.current)) {
             changeChannel('general')
         }
     }
@@ -355,7 +472,7 @@ const Home = () => {
                 })
             })
             .catch(() => {
-                if (requestId === messagesRequestRef.current) {
+                if (requestId === messagesRequestRef.current && navigator.onLine) {
                     pushToast('Unable to load messages.', 'error')
                 }
             })
@@ -368,6 +485,79 @@ const Home = () => {
         } else {
             setNewBelow(true)
         }
+    }
+
+    const scheduleSync = (delay = 200) => {
+        clearTimeout(syncTimerRef.current)
+        syncTimerRef.current = setTimeout(() => {
+            const socket = socketRef.current
+            if (!socket || !socket.connected) return
+            socket.emit('join', (userRef.current && userRef.current.username) || 'Anonymous')
+            fetchChannels().then((list) => {
+                if (list && !list.some((channel) => channel.name === activeChannelRef.current)) {
+                    changeChannel('general')
+                } else {
+                    fetchMessages(activeChannelRef.current)
+                }
+            })
+        }, delay)
+    }
+
+    const reconnectNow = () => {
+        const socket = socketRef.current
+        if (!socket) return
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setConnectionState('offline')
+            return
+        }
+        const now = Date.now()
+        if (now - reconnectGuardRef.current < 1200) {
+            scheduleSync(300)
+            return
+        }
+        reconnectGuardRef.current = now
+        setSocketReady(false)
+        setConnectionState('reconnecting')
+        setReconnectAttempt(0)
+        try {
+            socket.io.reconnection(true)
+            socket.io.reconnectionAttempts(Infinity)
+            socket.io.reconnectionDelay(RECONNECT_DELAY_MS)
+            socket.io.reconnectionDelayMax(RECONNECT_DELAY_MAX_MS)
+            socket.disconnect()
+            socket.connect()
+        } catch (error) {
+            // Socket.IO keeps retrying on its own if the manual cycle fails.
+        }
+        scheduleSync(600)
+    }
+
+    const resumeRealtime = () => {
+        const socket = socketRef.current
+        if (!socket) return
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setConnectionState('offline')
+            return
+        }
+        const hiddenFor = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0
+        hiddenAtRef.current = 0
+        if (!socket.connected) {
+            if (!everConnectedRef.current && !initialConnectFailedRef.current) {
+                // First connection is still in flight: let Socket.IO finish.
+                return
+            }
+            reconnectNow()
+            return
+        }
+        if (hiddenFor > RESUME_RECONNECT_MS) {
+            if (!disconnectedAtRef.current) {
+                disconnectedAtRef.current = Date.now() - hiddenFor
+            }
+            reconnectNow()
+            return
+        }
+        setConnectionState('live')
+        scheduleSync(150)
     }
 
     const handleScroll = (e) => {
@@ -622,6 +812,15 @@ const Home = () => {
 
     const onlineCount = onlineUsers.length || userCount || 0
     const meTyping = typingName && (!user || typingName !== user.username)
+    const connectionLabel = CONNECTION_LABELS[connectionState] || CONNECTION_LABELS.connecting
+    const connectionClass = CONNECTION_LABELS[connectionState] ? connectionState : 'connecting'
+    const showConnectionBanner = connectionState === 'offline' ||
+        (connectionState === 'reconnecting' && reconnectAttempt > 0)
+    const connectionHint = connectionState === 'offline'
+        ? "You're offline. Messages stay on screen and will sync when the network returns."
+        : reconnectAttempt > 1
+            ? `Reconnecting… attempt ${reconnectAttempt}. New messages will sync automatically.`
+            : 'Reconnecting… new messages will sync as soon as the connection is back.';
 
     const buildTimeline = () => {
         const items = []
@@ -827,7 +1026,7 @@ const Home = () => {
 
                             <div className="chat-heading">
                                 <h1># {activeChannel}</h1>
-                                <p>{socketReady ? `${onlineCount} online` : 'Reconnecting…'}</p>
+                                <p>{connectionState === 'live' ? `${onlineCount} online` : connectionLabel}</p>
                             </div>
 
                             <div className="chat-actions">
@@ -839,8 +1038,14 @@ const Home = () => {
                                 >
                                     <IconSearch />
                                 </button>
-                                <span className={'conn-pill' + (socketReady ? ' ok' : ' down')}>
-                                    {socketReady ? 'Live' : 'Offline'}
+                                <span
+                                    className={'conn-pill ' + connectionClass}
+                                    role="status"
+                                    aria-live="polite"
+                                    title={`Realtime connection: ${connectionLabel.toLowerCase()}`}
+                                >
+                                    <span className="conn-dot" aria-hidden="true" />
+                                    {connectionLabel}
                                 </span>
                             </div>
                         </header>
@@ -862,8 +1067,18 @@ const Home = () => {
                             </div>
                         )}
 
-                        {!socketReady && (
-                            <div className="conn-banner">Realtime connection lost — reconnecting… Messages still send over HTTPS.</div>
+                        {showConnectionBanner && (
+                            <div
+                                className={'conn-banner ' + connectionClass}
+                                role="status"
+                                aria-live="polite"
+                            >
+                                <span className="conn-banner-dot" aria-hidden="true" />
+                                <span className="conn-banner-text">{connectionHint}</span>
+                                <button type="button" className="conn-retry" onClick={reconnectNow}>
+                                    {connectionState === 'offline' ? 'Retry' : 'Retry now'}
+                                </button>
+                            </div>
                         )}
 
                         <ul id="tchat" onScroll={handleScroll} ref={tchatRef}>

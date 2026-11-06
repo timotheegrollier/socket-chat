@@ -26,6 +26,10 @@ interface Client {
 }
 
 const PING_INTERVAL_MS = 25_000;
+// Mobile browsers suspend JavaScript when the screen locks, so give them a
+// longer grace period before declaring the socket dead. On resume the client
+// also forces a fresh connection and re-syncs anything it missed.
+const PING_TIMEOUT_MS = 60_000;
 const MAX_ROOM_LENGTH = 64;
 const MAX_NAME_LENGTH = 64;
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
@@ -156,7 +160,7 @@ export class ChatRoom {
           sid: id,
           upgrades: [],
           pingInterval: PING_INTERVAL_MS,
-          pingTimeout: 20_000,
+          pingTimeout: PING_TIMEOUT_MS,
           maxPayload: 1_000_000,
         })
     );
