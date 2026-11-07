@@ -4,13 +4,12 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.2.2** makes the chat open instantly: channels and the latest
-messages are cached per account on the device and painted before the first API
-round-trip, new messages travel whole over the socket, and everything is
-revalidated in the background. It also keeps the previous improvements:
-identified messages, typing indicator, unread notifications, a rebuilt interface,
-multiple channels, a cloud-native realtime layer, a connection that survives
-phone locks and network drops, and a pseudo that stays attached to every message.
+Version **2.2.3** improves the PWA ergonomics on phones (Telegram-style):
+full-screen chat, safe areas and keyboard-aware layout, a compact drawer/composer,
+and message bubbles. It also keeps the previous improvements: instant local
+loading with background revalidation, whole-message socket delivery, identified
+messages, typing indicator, unread notifications, multiple channels, resilient
+connections, and a pseudo that stays attached to every message.
 
 **Live:** https://timotheegrollier.github.io/socket-chat/
 
@@ -228,7 +227,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.2.2", "timestamp": "..." }
+{ "status": "ok", "version": "2.2.3", "timestamp": "..." }
 ```
 
 ---
@@ -314,7 +313,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.2.2**. It is displayed on the About page and in the
+The current version is **2.2.3**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and
