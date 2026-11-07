@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import socketIOClient from 'socket.io-client';
@@ -112,4 +112,102 @@ test('renders channels and messages once the server answers', async () => {
 
   expect(await screen.findByText('Bonjour tout le monde')).toBeInTheDocument();
   expect(screen.getByText('random')).toBeInTheDocument();
+});
+
+test('renders the cached conversation instantly while the API revalidates', async () => {
+  const now = new Date().toISOString();
+  localStorage.setItem('socket-chat-cache-v1:user-1', JSON.stringify({
+    v: 1,
+    channels: [
+      { name: 'general', createdAt: null },
+      { name: 'cached', createdAt: now },
+    ],
+    messages: {
+      general: [{
+        _id: 'cached-1',
+        message: 'From the cache',
+        author: 'tester',
+        authorId: 'user-1',
+        channel: 'general',
+        createdAt: now,
+      }],
+    },
+  }));
+  axios.get.mockImplementation((url) => {
+    if (url.includes('/api/secure/')) return mockProfile();
+    return new Promise(() => {});
+  });
+
+  renderHome();
+
+  expect(screen.getByText('From the cache')).toBeInTheDocument();
+  expect(screen.getByText('cached')).toBeInTheDocument();
+  expect(screen.queryByText(/connecting to socket chat/i)).not.toBeInTheDocument();
+  await waitFor(() => expect(document.querySelector('.nav-username')).toHaveTextContent('tester'));
+});
+
+test('ignores a cache saved for another account', async () => {
+  localStorage.setItem('socket-chat-cache-v1:other-user', JSON.stringify({
+    v: 1,
+    channels: [{ name: 'general', createdAt: null }],
+    messages: {
+      general: [{
+        _id: 'other-1',
+        message: 'Not my conversation',
+        author: 'someone',
+        channel: 'general',
+        createdAt: new Date().toISOString(),
+      }],
+    },
+  }));
+  axios.get.mockImplementation((url) => {
+    if (url.includes('/api/secure/')) return mockProfile();
+    return new Promise(() => {});
+  });
+
+  renderHome();
+
+  expect(screen.queryByText('Not my conversation')).not.toBeInTheDocument();
+  expect(screen.getByText(/connecting to socket chat/i)).toBeInTheDocument();
+  await waitFor(() => expect(document.querySelector('.nav-username')).toHaveTextContent('tester'));
+});
+
+test('appends a complete newMsg payload without re-fetching messages', async () => {
+  const socket = makeSocket();
+  socketIOClient.mockImplementation(() => socket);
+  axios.get.mockImplementation((url) => {
+    if (url.includes('/api/secure/')) return mockProfile();
+    if (url.includes('/api/channels')) {
+      return Promise.resolve({ data: { channels: [{ name: 'general', createdAt: null }] } });
+    }
+    return Promise.resolve({ data: { messages: [] } });
+  });
+
+  renderHome();
+  await waitFor(() => expect(screen.getByText(/no messages yet/i)).toBeInTheDocument());
+
+  const messagesCalls = () => axios.get.mock.calls
+    .filter(([url]) => String(url).includes('/api/messages')).length;
+  const before = messagesCalls();
+  const handler = socket.on.mock.calls.find(([event]) => event === 'newMsg')[1];
+
+  act(() => {
+    handler({
+      channel: 'general',
+      message: {
+        _id: 'live-1',
+        message: 'Live from the socket',
+        author: 'tester',
+        authorId: 'user-1',
+        channel: 'general',
+        createdAt: new Date().toISOString(),
+      },
+    });
+  });
+
+  expect(await screen.findByText('Live from the socket')).toBeInTheDocument();
+  expect(messagesCalls()).toBe(before);
+
+  const cached = JSON.parse(localStorage.getItem('socket-chat-cache-v1:user-1'));
+  expect(cached.messages.general.some((message) => message._id === 'live-1')).toBe(true);
 });

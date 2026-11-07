@@ -72,10 +72,38 @@ async function main() {
   await aliceJoined;
 
   const newMsgPromise = waitFor(alice, 'newMsg');
-  alice.emit('newMsg', { channel: 'general' });
+  const savedMessage = {
+    _id: '64b7f0000000000000000001',
+    message: '  hello from the socket  ',
+    author: 'alice',
+    authorId: '64b7f0000000000000000002',
+    channel: 'general',
+    createdAt: '2026-01-01T10:00:00.000Z',
+  };
+  alice.emit('newMsg', { channel: 'general', message: savedMessage });
   const [newMsg] = await newMsgPromise;
   if (!newMsg || newMsg.channel !== 'general') throw new Error('newMsg payload mismatch');
+  if (!newMsg.message || newMsg.message._id !== savedMessage._id) {
+    throw new Error('newMsg message missing');
+  }
+  if (newMsg.message.message !== 'hello from the socket') {
+    throw new Error('newMsg message not normalized');
+  }
+  if (newMsg.message.author !== 'alice' || newMsg.message.channel !== 'general') {
+    throw new Error('newMsg message metadata mismatch');
+  }
   console.log('newMsg ok');
+
+  const legacyMsgPromise = waitFor(alice, 'newMsg');
+  alice.emit('newMsg', {
+    channel: 'general',
+    message: { _id: 'broken', message: '   ', author: 'alice', channel: 'general' },
+  });
+  const [legacyMsg] = await legacyMsgPromise;
+  if (!legacyMsg || legacyMsg.channel !== 'general' || legacyMsg.message) {
+    throw new Error('newMsg should fall back to a channel-only payload');
+  }
+  console.log('newMsg fallback ok');
 
   const channelsChangedPromise = waitFor(alice, 'channelsChanged');
   alice.emit('channelsChanged', {});

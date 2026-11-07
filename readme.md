@@ -4,7 +4,10 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.2.1** turns the original proof of concept into a usable chat:
+Version **2.2.2** makes the chat open instantly: channels and the latest
+messages are cached per account on the device and painted before the first API
+round-trip, new messages travel whole over the socket, and everything is
+revalidated in the background. It also keeps the previous improvements:
 identified messages, typing indicator, unread notifications, a rebuilt interface,
 multiple channels, a cloud-native realtime layer, a connection that survives
 phone locks and network drops, and a pseudo that stays attached to every message.
@@ -21,6 +24,7 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 | Feature | Description |
 | --- | --- |
 | Real-time messages | Socket.IO protocol over a WebSocket connection, no polling |
+| Instant loading | Channels and the last messages are cached per account on the device; a cold start shows them immediately, then revalidates quietly in the background |
 | Channels | Create a channel inline from the sidebar, switch instantly, delete it with its history; messages and search are scoped per channel |
 | Author & timestamps | Every message carries its author (pseudo), author id and creation date |
 | Reliable identity | The pseudo is cached at login, applied before the profile request finishes, and resolved from the account on the server — messages are never stored as Anonymous |
@@ -199,7 +203,7 @@ events:
 | Event | Payload | Server behaviour |
 | --- | --- | --- |
 | `join` | `name: string` or `{ name }` | Registers the pseudo and broadcasts the updated `presence` list |
-| `newMsg` | `{ channel }` | Broadcasts `newMsg` `{ channel }` to everyone |
+| `newMsg` | `{ channel, message? }` | Broadcasts `newMsg` `{ channel, message }` to everyone; `message` is the saved message (`_id`, `message`, `author`, `authorId`, `channel`, `createdAt`), clamped by the Worker. A plain `{ channel }` still works and asks clients to refresh |
 | `channelsChanged` | — | Broadcasts `channelsChanged` to everyone |
 | `channelDeleted` | `{ channel }` | Broadcasts `channelDeleted` `{ channel }` to everyone |
 | `resetTchat` | `{ channel }` | Broadcasts `reset` `{ channel }` to everyone |
@@ -224,7 +228,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.2.1", "timestamp": "..." }
+{ "status": "ok", "version": "2.2.2", "timestamp": "..." }
 ```
 
 ---
@@ -310,7 +314,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.2.1**. It is displayed on the About page and in the
+The current version is **2.2.2**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and
