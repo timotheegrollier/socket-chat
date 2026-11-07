@@ -52,8 +52,25 @@ exports.newMessage = (req, res, next) => {
 
 exports.getMessages = (req, res, next) => {
     const channel = normalizeChannel(req.query.channel)
+    const rawLimit = parseInt(req.query.limit, 10)
+    const limit = Number.isNaN(rawLimit) ? 0 : Math.min(Math.max(rawLimit, 10), 500)
+
+    // Pour un chargement initial plus rapide, on peut limiter aux derniers messages
+    // tout en les renvoyant dans l'ordre chronologique attendu par l'UI.
+    if (limit > 0) {
+        return Message.find(channelFilter(channel))
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .select('-__v')
+            .lean()
+            .then(messages => res.status(200).json({ messages: messages.reverse(), channel }))
+            .catch(error => res.status(400).json({ error }))
+    }
+
     Message.find(channelFilter(channel))
         .sort({ createdAt: 1 })
+        .select('-__v')
+        .lean()
         .then(messages => res.status(200).json({ messages, channel }))
         .catch(error => res.status(400).json({ error }))
 }

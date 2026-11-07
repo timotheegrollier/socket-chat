@@ -545,7 +545,7 @@ const Home = () => {
         const nearBottom = forceBottom || !list || (list.scrollHeight - list.scrollTop - list.clientHeight < 150)
         if (!silent) setMessagesStatus((current) => (current === 'ready' ? current : 'loading'))
         try {
-            const res = await axios.get(config.api_url + '/api/messages', { params: { channel: target } })
+            const res = await axios.get(config.api_url + '/api/messages', { params: { channel: target, limit: 200 } })
             if (requestId !== messagesRequestRef.current) return
             const incoming = Array.isArray(res.data.messages) ? res.data.messages : []
             setMsg((current) => {
