@@ -289,6 +289,21 @@
     }
 }
 
+.sidebar-logout {
+    display: block;
+    margin-top: 1px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: left;
+
+    &:hover {
+        color: var(--danger);
+    }
+}
+
 .sidebar-version {
     font-size: 11px;
     color: var(--muted);
@@ -327,7 +342,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 11px 18px;
+    padding: max(11px, env(safe-area-inset-top)) 18px 11px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-soft);
     min-height: 56px;
@@ -773,16 +788,16 @@
 .msg {
     position: relative;
     display: flex;
-    gap: 12px;
-    padding: 3px 10px;
+    gap: 10px;
+    padding: 2px 8px;
     border-radius: var(--radius-sm);
 
     &:hover {
-        background: rgba(255, 255, 255, 0.02);
+        background: rgba(255, 255, 255, 0.015);
     }
 
     &.grouped {
-        margin-top: 0;
+        margin-top: 1px;
     }
 
     &:not(.grouped) {
@@ -813,6 +828,9 @@
 .msg-body {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     padding-top: 1px;
 }
 
@@ -820,11 +838,12 @@
     display: flex;
     align-items: baseline;
     gap: 8px;
-    margin-bottom: 1px;
+    margin-bottom: 3px;
+    padding: 0 2px;
 }
 
 .msg-author {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text);
 }
@@ -839,15 +858,50 @@
 }
 
 .msg-text {
-    font-size: 13.8px;
-    line-height: 1.55;
-    color: #cbd1e0;
+    display: inline-block;
+    max-width: min(100%, 680px);
+    padding: 8px 12px;
+    border-radius: 4px 18px 18px 18px;
+    background: var(--surface-2);
+    font-size: 14.5px;
+    line-height: 1.45;
+    color: #dce1ee;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 
+.msg.grouped .msg-text {
+    border-top-left-radius: 8px;
+}
+
+.msg.own {
+    flex-direction: row-reverse;
+}
+
+.msg.own .msg-gutter {
+    display: none;
+}
+
+.msg.own .msg-body {
+    align-items: flex-end;
+}
+
+.msg.own .msg-head {
+    flex-direction: row-reverse;
+}
+
+.msg.own .msg-text {
+    background: linear-gradient(180deg, #5b7cfa, #4f6ef0);
+    color: #fff;
+    border-radius: 18px 4px 18px 18px;
+}
+
+.msg.own.grouped .msg-text {
+    border-top-right-radius: 8px;
+}
+
 .msg.pending .msg-text {
-    opacity: 0.65;
+    opacity: 0.7;
 }
 
 .msg.pending .msg-time::after {
@@ -892,7 +946,13 @@
     }
 }
 
-.msg:hover .msg-actions {
+.msg.own .msg-actions {
+    right: auto;
+    left: 10px;
+}
+
+.msg:hover .msg-actions,
+.msg:focus-within .msg-actions {
     opacity: 1;
     pointer-events: auto;
 }
@@ -924,7 +984,7 @@
     position: relative;
     padding: 6px 18px max(14px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
-    background: var(--bg);
+    background: var(--bg-soft);
 }
 
 .typing {
@@ -978,9 +1038,9 @@
 .composer {
     display: flex;
     align-items: flex-end;
-    gap: 6px;
-    padding: 6px;
-    border-radius: var(--radius);
+    gap: 4px;
+    padding: 5px 6px 5px 8px;
+    border-radius: 22px;
     border: 1px solid var(--border);
     background: var(--surface);
     transition: border-color 0.15s, box-shadow 0.15s;
@@ -993,14 +1053,14 @@
     textarea {
         flex: 1;
         min-width: 0;
-        padding: 8px 6px;
+        padding: 9px 4px;
         border: 0;
         outline: none;
         resize: none;
         background: transparent;
         color: var(--text);
-        font-size: 14px;
-        line-height: 1.45;
+        font-size: 16px;
+        line-height: 1.35;
         max-height: 140px;
 
         &::placeholder {
@@ -1037,20 +1097,24 @@
 }
 
 .send-btn {
-    width: 36px;
-    height: 34px;
-    flex: 0 0 36px;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: 0;
-    border-radius: var(--radius-sm);
+    border-radius: 50%;
     background: var(--accent);
     color: #fff;
-    transition: background 0.15s;
+    transition: background 0.15s, transform 0.1s;
 
     &:hover:not(:disabled) {
         background: var(--accent-strong);
+    }
+
+    &:active:not(:disabled) {
+        transform: scale(0.96);
     }
 
     &:disabled {
@@ -1060,8 +1124,8 @@
     }
 
     .spinner {
-        width: 15px;
-        height: 15px;
+        width: 16px;
+        height: 16px;
         border-radius: 50%;
         border: 2px solid rgba(255, 255, 255, 0.35);
         border-top-color: #fff;
@@ -1192,16 +1256,51 @@
 }
 
 @media screen and (max-width: 640px) {
+    .chat-shell {
+        height: 100dvh;
+        max-height: 100dvh;
+    }
+
+    .chat-sidebar {
+        top: 0;
+        width: min(320px, 88vw);
+        flex-basis: auto;
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .sidebar-overlay {
+        top: 0;
+    }
+
     #tchat {
-        padding: 14px 12px 8px;
+        padding: 12px 10px 8px;
+        overscroll-behavior-y: contain;
+        -webkit-overflow-scrolling: touch;
     }
 
     .chat-topbar {
-        padding: 10px 12px;
+        padding: max(10px, env(safe-area-inset-top)) 10px 10px;
+        gap: 8px;
+        min-height: 0;
+    }
+
+    .chat-heading h1 {
+        font-size: 16px;
+    }
+
+    .icon-btn {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
     }
 
     .conn-pill {
         padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    .chat-searchbar {
+        padding: 8px 10px;
     }
 
     .conn-banner {
@@ -1217,10 +1316,28 @@
     }
 
     #chatFooter {
-        padding: 4px 12px max(12px, env(safe-area-inset-bottom));
+        padding: 4px 10px max(10px, env(safe-area-inset-bottom));
+        border-top-color: rgba(36, 43, 58, 0.7);
     }
 
-    .composer-hint {
+    .typing {
+        height: 18px;
+        margin: 0 6px 1px;
+        font-size: 11px;
+    }
+
+    .composer {
+        border-radius: 24px;
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+    }
+
+    .composer-btn {
+        width: 38px;
+        height: 38px;
+        flex-basis: 38px;
+    }
+
+    .composer-meta {
         display: none;
     }
 
@@ -1237,9 +1354,9 @@
     }
 
     .toast-stack {
-        left: 12px;
-        right: 12px;
+        left: 10px;
+        right: 10px;
         max-width: none;
-        bottom: 118px;
+        bottom: calc(112px + env(safe-area-inset-bottom));
     }
 }

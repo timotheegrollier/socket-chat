@@ -253,4 +253,15 @@ a {
     .nav-brand span:last-child {
         display: none;
     }
+
+    /* In the chat view, the global nav wastes precious vertical space on
+       phones. The sidebar keeps account/actions accessible. */
+    #Home:has(.chat-shell) .app-nav {
+        display: none;
+    }
+
+    #Home:has(.chat-shell) .chat-shell {
+        height: 100dvh;
+        max-height: 100dvh;
+    }
 }

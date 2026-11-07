@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.2';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.3';
 const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
@@ -1381,7 +1381,20 @@ const Home = () => {
                                 <span className="presence-avatar accent">{initials(user && user.username)}</span>
                                 <div>
                                     <strong>{user && user.username ? user.username : '…'}</strong>
-                                    <span>Signed in</span>
+                                    <button
+                                        type="button"
+                                        className="sidebar-logout"
+                                        onClick={() => {
+                                            Object.keys(localStorage)
+                                                .filter((key) => key.indexOf('socket-chat-cache-v') === 0)
+                                                .forEach((key) => localStorage.removeItem(key))
+                                            localStorage.removeItem('JWT')
+                                            localStorage.removeItem(USERNAME_KEY)
+                                            window.location.reload()
+                                        }}
+                                    >
+                                        Log out
+                                    </button>
                                 </div>
                             </div>
                             <Link to="/about" className="sidebar-version">v{APP_VERSION}</Link>
