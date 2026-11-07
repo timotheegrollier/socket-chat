@@ -111,7 +111,10 @@ const Home = () => {
     const [showEmoji, setShowEmoji] = useStateIfMounted(false)
     const [charCount, setCharCount] = useStateIfMounted(0)
     const [newBelow, setNewBelow] = useStateIfMounted(false)
-    const [hasLoaded, setHasLoaded] = useStateIfMounted(false)
+    const [messagesStatus, setMessagesStatus] = useStateIfMounted('loading')
+    const [channelsStatus, setChannelsStatus] = useStateIfMounted('loading')
+    const [slowBoot, setSlowBoot] = useStateIfMounted(false)
+    const [slowConnection, setSlowConnection] = useStateIfMounted(false)
     const [searchOpen, setSearchOpen] = useStateIfMounted(false)
     const [searchTerm, setSearchTerm] = useStateIfMounted('')
     const [sidebarOpen, setSidebarOpen] = useStateIfMounted(false)
@@ -138,6 +141,9 @@ const Home = () => {
     const initialConnectFailedRef = useRef(false)
     const disconnectedAtRef = useRef(0)
     const hiddenAtRef = useRef(0)
+    const messagesStatusRef = useRef('loading')
+    const channelsStatusRef = useRef('loading')
+    const retryLoadsRef = useRef()
 
     const config = require('../config.json')
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -181,6 +187,38 @@ const Home = () => {
     useEffect(() => {
         userRef.current = user
     }, [user]);
+
+    useEffect(() => {
+        channelsStatusRef.current = channelsStatus
+    }, [channelsStatus]);
+
+    useEffect(() => {
+        messagesStatusRef.current = messagesStatus
+    }, [messagesStatus]);
+
+    // A cold PWA start can spend a while talking to a sleeping free-host API.
+    // After 7s, tell the user what is happening instead of leaving a spinner.
+    useEffect(() => {
+        if (!connected || messagesStatus !== 'loading') {
+            setSlowBoot(false)
+            return
+        }
+        const timer = setTimeout(() => setSlowBoot(true), 7000)
+        return () => clearTimeout(timer)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [connected, messagesStatus]);
+
+    // Same idea for the socket: don't flash a banner for a quick connection,
+    // but surface it if the realtime server is still not there after 2.5s.
+    useEffect(() => {
+        if (!connected || connectionState === 'live' || connectionState === 'offline') {
+            setSlowConnection(false)
+            return
+        }
+        const timer = setTimeout(() => setSlowConnection(true), 2500)
+        return () => clearTimeout(timer)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [connected, connectionState]);
 
     useEffect(() => {
         const onVisibilityChange = () => {
@@ -311,6 +349,10 @@ const Home = () => {
                 if (outage && !document.hidden) {
                     pushToast('Back online — syncing messages…', 'success')
                 }
+            } else if (channelsStatusRef.current !== 'ready' || messagesStatusRef.current !== 'ready') {
+                // The first connection can land after the initial REST calls
+                // already failed (sleeping free-host API): reload them now.
+                scheduleSync(150)
             }
         })
         socket.on("disconnect", (reason) => {
@@ -385,6 +427,8 @@ const Home = () => {
     const getLogged = async (isConnected) => {
         setupSocket()
         setConnected(isConnected)
+        setChannelsStatus('loading')
+        setMessagesStatus('loading')
         loadProfile()
         const list = await fetchChannels() || [{ name: 'general', createdAt: null }]
         const wanted = activeChannelRef.current || 'general'
@@ -441,7 +485,8 @@ const Home = () => {
         }
     }
 
-    const fetchChannels = async () => {
+    const fetchChannels = async (silent = false) => {
+        if (!silent) setChannelsStatus((current) => (current === 'ready' ? current : 'loading'))
         try {
             const res = await axios.get(config.api_url + '/api/channels')
             const list = Array.isArray(res.data.channels) ? res.data.channels : []
@@ -450,6 +495,7 @@ const Home = () => {
             }
             const sorted = sortChannels(list)
             setChannels(sorted)
+            setChannelsStatus('ready')
             return sorted
         } catch (error) {
             // Keep the channels already on screen during a network blip;
@@ -457,6 +503,7 @@ const Home = () => {
             setChannels((current) => (current && current.length)
                 ? current
                 : [{ name: 'general', createdAt: null }])
+            setChannelsStatus((current) => (current === 'ready' ? current : 'error'))
             return null
         }
     }
@@ -481,7 +528,7 @@ const Home = () => {
         localStorage.setItem('socket-chat-channel', target)
         messagesRequestRef.current += 1
         setMsg([])
-        setHasLoaded(false)
+        setMessagesStatus('loading')
         setNewBelow(false)
         setTypingName('')
         setSearchOpen(false)
@@ -491,29 +538,32 @@ const Home = () => {
         if (!isMobile && inputRef.current) inputRef.current.focus()
     }
 
-    const fetchMessages = async (channel = activeChannelRef.current, forceBottom = false) => {
+    const fetchMessages = async (channel = activeChannelRef.current, forceBottom = false, silent = false) => {
         const target = channel || 'general'
         const requestId = ++messagesRequestRef.current
         const list = tchatRef.current
         const nearBottom = forceBottom || !list || (list.scrollHeight - list.scrollTop - list.clientHeight < 150)
-        await axios.get(config.api_url + '/api/messages', { params: { channel: target } })
-            .then(res => {
-                if (requestId !== messagesRequestRef.current) return
-                const incoming = Array.isArray(res.data.messages) ? res.data.messages : []
-                setMsg((current) => {
-                    // Keep messages still being sent so a socket refresh never
-                    // makes an optimistic message disappear before the POST ends.
-                    const pending = (current || []).filter((m) => m && m.pending && m.channel === target)
-                    return pending.length ? [...incoming, ...pending] : incoming
-                })
+        if (!silent) setMessagesStatus((current) => (current === 'ready' ? current : 'loading'))
+        try {
+            const res = await axios.get(config.api_url + '/api/messages', { params: { channel: target } })
+            if (requestId !== messagesRequestRef.current) return
+            const incoming = Array.isArray(res.data.messages) ? res.data.messages : []
+            setMsg((current) => {
+                // Keep messages still being sent so a socket refresh never
+                // makes an optimistic message disappear before the POST ends.
+                const pending = (current || []).filter((m) => m && m.pending && m.channel === target)
+                return pending.length ? [...incoming, ...pending] : incoming
             })
-            .catch(() => {
-                if (requestId === messagesRequestRef.current && navigator.onLine) {
-                    pushToast('Unable to load messages.', 'error')
-                }
-            })
+            setMessagesStatus('ready')
+        } catch (error) {
+            if (requestId !== messagesRequestRef.current) return
+            // Only surface a blocking error when there is nothing to show;
+            // a failed background refresh must never hide existing messages.
+            setMessagesStatus((current) => (current === 'loading' ? 'error' : current))
+            if (navigator.onLine && !silent) pushToast('Unable to load messages.', 'error')
+            return
+        }
         if (requestId !== messagesRequestRef.current) return
-        setHasLoaded(true)
         if (nearBottom) {
             const el = tchatRef.current
             if (el) el.scrollTop = el.scrollHeight - el.clientHeight
@@ -570,6 +620,32 @@ const Home = () => {
         }
         scheduleSync(600)
     }
+
+    const retryLoads = (silent = false) => {
+        const socket = socketRef.current
+        const online = typeof navigator === 'undefined' || navigator.onLine
+        if (socket && !socket.connected && online) reconnectNow()
+        fetchChannels(silent).then((list) => {
+            if (list && !list.some((channel) => channel.name === activeChannelRef.current)) {
+                changeChannel('general')
+            }
+        })
+        fetchMessages(activeChannelRef.current, true, silent)
+    }
+    retryLoadsRef.current = retryLoads
+
+    // While the API is unreachable (often a sleeping free-host instance),
+    // keep retrying quietly so the user does not have to tap Retry forever.
+    useEffect(() => {
+        if (!connected) return
+        if (channelsStatus !== 'error' && messagesStatus !== 'error') return
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return
+        const timer = setInterval(() => {
+            if (retryLoadsRef.current) retryLoadsRef.current(true)
+        }, 7000)
+        return () => clearInterval(timer)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [connected, channelsStatus, messagesStatus]);
 
     const resumeRealtime = () => {
         const socket = socketRef.current
@@ -696,7 +772,7 @@ const Home = () => {
 
         // Show the message immediately, before the API round-trip.
         setMsg((current) => [...(current || []), optimistic])
-        setHasLoaded(true)
+        setMessagesStatus('ready')
         setNewBelow(false)
         clearInput()
         requestAnimationFrame(() => {
@@ -863,13 +939,39 @@ const Home = () => {
     const meTyping = typingName && (!user || typingName !== user.username)
     const connectionLabel = CONNECTION_LABELS[connectionState] || CONNECTION_LABELS.connecting
     const connectionClass = CONNECTION_LABELS[connectionState] ? connectionState : 'connecting'
-    const showConnectionBanner = connectionState === 'offline' ||
-        (connectionState === 'reconnecting' && reconnectAttempt > 0)
+    const isOnline = typeof navigator === 'undefined' || navigator.onLine
+    const bootLoading = messagesStatus === 'loading'
+    // The boot panel already explains the connection state while data loads;
+    // the banner is for a realtime connection that stays down afterwards.
+    const showConnectionBanner = !bootLoading && (
+        connectionState === 'offline' ||
+        ((connectionState === 'connecting' || connectionState === 'reconnecting') && slowConnection)
+    )
     const connectionHint = connectionState === 'offline'
         ? "You're offline. Messages stay on screen and will sync when the network returns."
-        : reconnectAttempt > 1
-            ? `Reconnecting… attempt ${reconnectAttempt}. New messages will sync automatically.`
-            : 'Reconnecting… new messages will sync as soon as the connection is back.';
+        : connectionState === 'connecting'
+            ? 'Connecting to the realtime server… it may be waking up. Messages will load as soon as it answers.'
+            : reconnectAttempt > 1
+                ? `Reconnecting… attempt ${reconnectAttempt}. New messages will sync automatically.`
+                : 'Reconnecting… new messages will sync as soon as the connection is back.';
+
+    const realtimeStep = socketReady || connectionState === 'live'
+        ? 'done'
+        : connectionState === 'offline'
+            ? 'error'
+            : 'active'
+    const channelsStep = channelsStatus === 'ready' ? 'done' : channelsStatus === 'error' ? 'error' : 'active'
+    const messagesStep = messagesStatus === 'ready' ? 'done' : messagesStatus === 'error' ? 'error' : 'active'
+    const bootTitle = !isOnline
+        ? "You're offline"
+        : slowBoot
+            ? 'Still connecting to Socket Chat…'
+            : 'Connecting to Socket Chat…'
+    const bootHint = !isOnline
+        ? 'We will load your channels and messages as soon as the network comes back.'
+        : slowBoot
+            ? 'The server may be waking up. Free hosting can take up to a minute on the first visit.'
+            : 'Starting the realtime connection and loading your channels and messages.'
 
     const buildTimeline = () => {
         const items = []
@@ -944,7 +1046,7 @@ const Home = () => {
                 <div className="chat-shell">
 
                     <aside className={'chat-sidebar' + (sidebarOpen ? ' open' : '')}>
-                        <div className="sidebar-section sidebar-channels">
+                        <div className="sidebar-section sidebar-channels" aria-busy={channelsStatus === 'loading'}>
                             <span className="sidebar-label">
                                 <span>Channels</span>
                                 <button
@@ -986,38 +1088,50 @@ const Home = () => {
                                 </form>
                             )}
 
-                            <ul className="channel-list">
-                                {channels.map((channel) => (
-                                    <li
-                                        key={channel.name}
-                                        className={'channel-item' + (channel.name === activeChannel ? ' active' : '')}
-                                    >
-                                        <button
-                                            type="button"
-                                            className="channel"
-                                            title={`#${channel.name}`}
-                                            onClick={() => changeChannel(channel.name)}
+                            {channelsStatus === 'loading' && channels.length === 0 ? (
+                                <ul className="channel-skeleton" aria-hidden="true">
+                                    <li /><li /><li />
+                                </ul>
+                            ) : (
+                                <ul className="channel-list">
+                                    {channels.map((channel) => (
+                                        <li
+                                            key={channel.name}
+                                            className={'channel-item' + (channel.name === activeChannel ? ' active' : '')}
                                         >
-                                            <span className="channel-hash">#</span>
-                                            <span className="channel-name">{channel.name}</span>
-                                            {channel.name === activeChannel && (
-                                                <span className="badge-count">{onlineCount}</span>
-                                            )}
-                                        </button>
-                                        {channel.name !== 'general' && (
                                             <button
                                                 type="button"
-                                                className="channel-delete"
-                                                title={`Delete #${channel.name}`}
-                                                aria-label={`Delete #${channel.name}`}
-                                                onClick={() => deleteChannel(channel.name)}
+                                                className="channel"
+                                                title={`#${channel.name}`}
+                                                onClick={() => changeChannel(channel.name)}
                                             >
-                                                <IconTrash />
+                                                <span className="channel-hash">#</span>
+                                                <span className="channel-name">{channel.name}</span>
+                                                {channel.name === activeChannel && (
+                                                    <span className="badge-count">{onlineCount}</span>
+                                                )}
                                             </button>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
+                                            {channel.name !== 'general' && (
+                                                <button
+                                                    type="button"
+                                                    className="channel-delete"
+                                                    title={`Delete #${channel.name}`}
+                                                    aria-label={`Delete #${channel.name}`}
+                                                    onClick={() => deleteChannel(channel.name)}
+                                                >
+                                                    <IconTrash />
+                                                </button>
+                                            )}
+                                        </li>
+                                    ))}
+                                    {channelsStatus === 'error' && (
+                                        <li className="sidebar-error">
+                                            <span>Channels unavailable</span>
+                                            <button type="button" onClick={() => retryLoads()}>Retry</button>
+                                        </li>
+                                    )}
+                                </ul>
+                            )}
                         </div>
 
                         <div className="sidebar-section sidebar-online">
@@ -1036,7 +1150,9 @@ const Home = () => {
                                         <span className="presence-dot" aria-hidden="true"></span>
                                     </li>
                                 )) : (
-                                    <li className="presence-empty">Waiting for presence…</li>
+                                    <li className="presence-empty">
+                                        {connectionState === 'live' ? 'No one else here yet.' : 'Connecting to presence…'}
+                                    </li>
                                 )}
                             </ul>
                         </div>
@@ -1131,10 +1247,44 @@ const Home = () => {
                         )}
 
                         <ul id="tchat" onScroll={handleScroll} ref={tchatRef}>
-                            {!hasLoaded ? (
-                                <div className="chat-state">
+                            {messagesStatus === 'loading' ? (
+                                <div className="chat-state chat-boot" role="status" aria-live="polite">
                                     <div className="loader-ring" aria-hidden="true"></div>
-                                    <h3>Loading messages…</h3>
+                                    <h3>{bootTitle}</h3>
+                                    <p>{bootHint}</p>
+                                    <ul className="boot-steps">
+                                        <li className={'boot-step ' + realtimeStep}>
+                                            <span className="boot-step-dot" aria-hidden="true" />
+                                            <span>Realtime connection</span>
+                                            <em>{realtimeStep === 'done' ? 'Ready' : realtimeStep === 'error' ? 'Offline' : 'Connecting…'}</em>
+                                        </li>
+                                        <li className={'boot-step ' + channelsStep}>
+                                            <span className="boot-step-dot" aria-hidden="true" />
+                                            <span>Channels</span>
+                                            <em>{channelsStep === 'done' ? 'Loaded' : channelsStep === 'error' ? 'Unavailable' : 'Loading…'}</em>
+                                        </li>
+                                        <li className={'boot-step ' + messagesStep}>
+                                            <span className="boot-step-dot" aria-hidden="true" />
+                                            <span>Messages</span>
+                                            <em>{messagesStep === 'done' ? 'Loaded' : messagesStep === 'error' ? 'Unavailable' : 'Loading…'}</em>
+                                        </li>
+                                    </ul>
+                                    {(slowBoot || realtimeStep === 'error') && (
+                                        <button type="button" className="state-action" onClick={() => retryLoads()}>
+                                            Retry now
+                                        </button>
+                                    )}
+                                </div>
+                            ) : messagesStatus === 'error' ? (
+                                <div className="chat-state chat-error" role="alert">
+                                    <div className="empty-emoji" aria-hidden="true">📡</div>
+                                    <h3>{isOnline ? "Can't reach the chat server" : "You're offline"}</h3>
+                                    <p>
+                                        {isOnline
+                                            ? "The server may still be waking up. We'll retry automatically — or try again now."
+                                            : "Your messages will appear as soon as you're back online. We'll retry automatically."}
+                                    </p>
+                                    <button type="button" className="state-action" onClick={() => retryLoads()}>Try again</button>
                                 </div>
                             ) : filtered.length === 0 ? (
                                 <div className="chat-state chat-empty">
