@@ -32,7 +32,19 @@ const PING_INTERVAL_MS = 25_000;
 const PING_TIMEOUT_MS = 60_000;
 const MAX_ROOM_LENGTH = 64;
 const MAX_NAME_LENGTH = 64;
+const MAX_MESSAGE_LENGTH = 500;
+const MAX_AUTHOR_LENGTH = 12;
+const MAX_ID_LENGTH = 64;
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
+
+interface ChatMessagePayload {
+  _id: string;
+  message: string;
+  author: string;
+  authorId: string;
+  channel: string;
+  createdAt: string;
+}
 
 const readChannel = (payload: unknown): string => {
   let raw: unknown;
@@ -44,6 +56,43 @@ const readChannel = (payload: unknown): string => {
   if (typeof raw !== 'string') return '';
   const name = raw.trim().toLowerCase().replace(/^#/, '');
   return CHANNEL_PATTERN.test(name) ? name : '';
+};
+
+// A saved message travels with the `newMsg` event so every client can append
+// it without an extra REST round-trip. Treat it as untrusted input: clamp
+// every field, and fall back to the legacy channel-only notification when the
+// payload is incomplete.
+const readMessage = (payload: unknown, fallbackChannel: string): ChatMessagePayload | null => {
+  if (!payload || typeof payload !== 'object') return null;
+  const raw = (payload as { message?: unknown }).message;
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Record<string, unknown>;
+  if (typeof data._id !== 'string' || typeof data.message !== 'string') return null;
+
+  const id = data._id.trim().slice(0, MAX_ID_LENGTH);
+  const message = data.message.trim().slice(0, MAX_MESSAGE_LENGTH);
+  const channel = readChannel(data) || fallbackChannel;
+  if (!id || !message || !channel) return null;
+
+  const author = typeof data.author === 'string'
+    ? data.author.trim().slice(0, MAX_AUTHOR_LENGTH)
+    : '';
+  const authorId = typeof data.authorId === 'string'
+    ? data.authorId.trim().slice(0, MAX_ID_LENGTH)
+    : '';
+  const rawCreatedAt = typeof data.createdAt === 'string' ? new Date(data.createdAt) : null;
+  const createdAt = rawCreatedAt && !Number.isNaN(rawCreatedAt.getTime())
+    ? rawCreatedAt.toISOString()
+    : new Date().toISOString();
+
+  return {
+    _id: id,
+    message,
+    author: author || 'Anonymous',
+    authorId,
+    channel,
+    createdAt,
+  };
 };
 
 // The chat frontend origin and local development origins. Add any custom
@@ -294,7 +343,12 @@ export class ChatRoom {
 
     if (eventName === 'newMsg') {
       const channel = readChannel(payload);
-      this.broadcastToAll('newMsg', channel ? { channel } : {});
+      const message = readMessage(payload, channel);
+      if (message) {
+        this.broadcastToAll('newMsg', { channel: message.channel, message });
+      } else {
+        this.broadcastToAll('newMsg', channel ? { channel } : {});
+      }
       return;
     }
 

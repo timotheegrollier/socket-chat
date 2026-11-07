@@ -4,6 +4,10 @@ import { Link, NavLink } from 'react-router-dom';
 class Nav extends Component {
     handleLogout(e) {
         e.preventDefault()
+        // Chat history cached on this device must not survive a logout.
+        Object.keys(localStorage)
+            .filter((key) => key.indexOf('socket-chat-cache-v') === 0)
+            .forEach((key) => localStorage.removeItem(key))
         localStorage.removeItem("JWT")
         localStorage.removeItem("socket-chat-username")
         window.location.reload()

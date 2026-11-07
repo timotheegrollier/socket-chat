@@ -4,9 +4,14 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.1';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.2';
 
 const NEW_IN_V2 = [
+    {
+        icon: '🗂️',
+        title: 'Instant loading',
+        text: 'Channels and the latest messages are cached per account on the device. A cold start paints the conversation immediately, then revalidates in the background; new messages travel whole over the socket instead of triggering an extra request each time.',
+    },
     {
         icon: '💬',
         title: 'Channels',

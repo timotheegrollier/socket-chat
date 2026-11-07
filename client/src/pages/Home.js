@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.1';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.2';
 const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
@@ -64,6 +64,94 @@ const sortChannels = (list) => [...list].sort((a, b) => {
 })
 
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/
+// Keep the last conversation on the device so a cold PWA start renders it
+// immediately instead of waiting for the REST API (often a sleeping free
+// host). The cache is versioned and scoped per account, and is always
+// revalidated in the background.
+const CHAT_CACHE_VERSION = 1
+const CHAT_CACHE_PREFIX = 'socket-chat-cache-v' + CHAT_CACHE_VERSION + ':'
+const MAX_CACHED_MESSAGES = 150
+const MAX_CACHED_CHANNELS = 24
+
+const currentUserId = () => {
+    try {
+        const auth = JSON.parse(localStorage.getItem('JWT'))
+        return auth && auth.userId ? auth.userId : null
+    } catch (error) {
+        return null
+    }
+}
+
+const normalizeCachedMessage = (message, fallbackChannel) => {
+    if (!message || typeof message !== 'object') return null
+    if (!message._id || typeof message.message !== 'string') return null
+    return {
+        _id: String(message._id),
+        message: message.message,
+        author: typeof message.author === 'string' && message.author ? message.author : 'Anonymous',
+        authorId: typeof message.authorId === 'string' ? message.authorId : '',
+        channel: typeof message.channel === 'string' && message.channel ? message.channel : fallbackChannel,
+        createdAt: message.createdAt || null,
+    }
+}
+
+const readChatCache = (userId) => {
+    if (!userId) return null
+    try {
+        const raw = localStorage.getItem(CHAT_CACHE_PREFIX + userId)
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        if (!parsed || parsed.v !== CHAT_CACHE_VERSION) return null
+        const channels = Array.isArray(parsed.channels)
+            ? parsed.channels.filter((channel) => channel && typeof channel.name === 'string')
+            : []
+        const messages = {}
+        if (parsed.messages && typeof parsed.messages === 'object') {
+            Object.keys(parsed.messages).forEach((channel) => {
+                const list = parsed.messages[channel]
+                if (!Array.isArray(list)) return
+                const clean = list
+                    .map((message) => normalizeCachedMessage(message, channel))
+                    .filter(Boolean)
+                    .slice(-MAX_CACHED_MESSAGES)
+                if (clean.length) messages[channel] = clean
+            })
+        }
+        return { channels, messages }
+    } catch (error) {
+        return null
+    }
+}
+
+const updateChatCache = (userId, mutate) => {
+    if (!userId) return
+    try {
+        const cache = readChatCache(userId) || { channels: [], messages: {} }
+        mutate(cache)
+        const channels = cache.channels.slice(0, MAX_CACHED_CHANNELS)
+        const names = new Set(channels.map((channel) => channel.name))
+        const messages = {}
+        Object.keys(cache.messages || {}).forEach((channel) => {
+            // Once the channel list is known, drop history for removed
+            // channels instead of keeping it forever in localStorage.
+            if (names.size && !names.has(channel)) return
+            const list = (cache.messages[channel] || [])
+                .filter((message) => message && !message.pending)
+                .map((message) => normalizeCachedMessage(message, channel))
+                .filter(Boolean)
+                .slice(-MAX_CACHED_MESSAGES)
+            if (list.length) messages[channel] = list
+        })
+        localStorage.setItem(CHAT_CACHE_PREFIX + userId, JSON.stringify({
+            v: CHAT_CACHE_VERSION,
+            savedAt: Date.now(),
+            channels,
+            messages,
+        }))
+    } catch (error) {
+        // Storage can be full or disabled (private mode): the chat still works.
+    }
+}
 
 const IconSearch = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -119,7 +207,7 @@ const Home = () => {
     const [searchTerm, setSearchTerm] = useStateIfMounted('')
     const [sidebarOpen, setSidebarOpen] = useStateIfMounted(false)
     const [toasts, setToasts] = useStateIfMounted([])
-    const [channels, setChannels] = useStateIfMounted([])
+    const [channels, setChannels] = useStateIfMounted([{ name: 'general', createdAt: null }])
     const [activeChannel, setActiveChannel] = useStateIfMounted(localStorage.getItem('socket-chat-channel') || 'general')
     const [creatingChannel, setCreatingChannel] = useStateIfMounted(false)
     const [newChannelName, setNewChannelName] = useStateIfMounted('')
@@ -133,6 +221,8 @@ const Home = () => {
     const channelInputRef = useRef()
     const activeChannelRef = useRef(activeChannel)
     const messagesRequestRef = useRef(0)
+    const channelsRequestRef = useRef()
+    const messagesRequestsRef = useRef({})
     const userRef = useRef()
     const profileLoadingRef = useRef(false)
     const syncTimerRef = useRef()
@@ -148,6 +238,46 @@ const Home = () => {
     const config = require('../config.json')
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const myUserId = localStorage.getItem('JWT') ? JSON.parse(localStorage.getItem('JWT')).userId : null;
+
+    const cacheChannels = (list) => {
+        updateChatCache(currentUserId(), (cache) => {
+            cache.channels = Array.isArray(list) ? list : []
+        })
+    }
+
+    const cacheMessages = (channel, messages) => {
+        updateChatCache(currentUserId(), (cache) => {
+            cache.messages[channel] = Array.isArray(messages) ? messages : []
+        })
+    }
+
+    const appendCachedMessage = (channel, message) => {
+        if (!channel || !message || !message._id) return
+        updateChatCache(currentUserId(), (cache) => {
+            const list = cache.messages[channel] || []
+            if (!list.some((item) => item._id === message._id)) list.push(message)
+            cache.messages[channel] = list
+        })
+    }
+
+    const removeCachedMessage = (channel, id) => {
+        updateChatCache(currentUserId(), (cache) => {
+            cache.messages[channel] = (cache.messages[channel] || [])
+                .filter((message) => message._id !== id)
+        })
+    }
+
+    const clearCachedMessages = (channel) => {
+        if (!channel) return
+        updateChatCache(currentUserId(), (cache) => {
+            delete cache.messages[channel]
+        })
+    }
+
+    const scrollToBottomSoon = () => requestAnimationFrame(() => {
+        const el = tchatRef.current
+        if (el) el.scrollTop = el.scrollHeight - el.clientHeight
+    })
 
     useEffect(() => {
         if (localStorage.getItem('JWT') && JSON.parse(localStorage.getItem('JWT')).expiry > new Date().getTime()) {
@@ -387,12 +517,36 @@ const Home = () => {
 
         socket.on("newMsg", (data) => {
             const channel = data && data.channel
+            const incoming = normalizeCachedMessage(data && data.message, channel || 'general')
+            if (incoming) {
+                // The sender already saved the message through the REST API;
+                // the socket payload is enough to update every client without
+                // an extra GET per message.
+                appendCachedMessage(incoming.channel || channel, incoming)
+                if (channel && channel !== activeChannelRef.current) return
+                if (incoming.channel && incoming.channel !== activeChannelRef.current) return
+                if (document.hidden) setUnread((current) => (current || 0) + 1)
+                const list = tchatRef.current
+                const nearBottom = !list || (list.scrollHeight - list.scrollTop - list.clientHeight < 150)
+                setMsg((current) => {
+                    const messages = current || []
+                    if (messages.some((message) => message._id === incoming._id)) return messages
+                    return [...messages, incoming]
+                })
+                setMessagesStatus('ready')
+                if (nearBottom) scrollToBottomSoon()
+                else setNewBelow(true)
+                return
+            }
+            // Older payloads (or events such as a deletion) only carry the
+            // channel: fall back to a full refresh.
             if (channel && channel !== activeChannelRef.current) return
             if (document.hidden) setUnread((current) => (current || 0) + 1)
             fetchMessages(activeChannelRef.current)
         })
         socket.on("reset", (data) => {
             const channel = data && data.channel
+            if (channel) clearCachedMessages(channel)
             if (channel && channel !== activeChannelRef.current) return
             setMsg([])
             fetchMessages(activeChannelRef.current)
@@ -402,6 +556,7 @@ const Home = () => {
         })
         socket.on("channelDeleted", (data) => {
             const channel = data && data.channel
+            if (channel) clearCachedMessages(channel)
             if (channel && channel === activeChannelRef.current) changeChannel('general')
             refreshChannels()
         })
@@ -427,15 +582,43 @@ const Home = () => {
     const getLogged = async (isConnected) => {
         setupSocket()
         setConnected(isConnected)
-        setChannelsStatus('loading')
-        setMessagesStatus('loading')
         loadProfile()
-        const list = await fetchChannels() || [{ name: 'general', createdAt: null }]
-        const wanted = activeChannelRef.current || 'general'
-        const channel = list.some((item) => item.name === wanted) ? wanted : 'general'
+
+        // Paint the last known conversation immediately, then revalidate.
+        const cache = readChatCache(currentUserId())
+        const cachedChannels = cache && cache.channels.length ? sortChannels(cache.channels) : null
+        let channel = activeChannelRef.current || 'general'
+        if (cachedChannels && !cachedChannels.some((item) => item.name === channel)) {
+            channel = 'general'
+        }
+        const cachedMessages = cache && cache.messages[channel]
+        const hasCachedMessages = Boolean(cachedMessages && cachedMessages.length)
+
+        if (cachedChannels) {
+            setChannels(cachedChannels)
+            setChannelsStatus('ready')
+        } else {
+            setChannelsStatus('loading')
+        }
         activeChannelRef.current = channel
         setActiveChannel(channel)
-        fetchMessages(channel, true)
+        localStorage.setItem('socket-chat-channel', channel)
+        if (hasCachedMessages) {
+            setMsg(cachedMessages)
+            setMessagesStatus('ready')
+            scrollToBottomSoon()
+        } else {
+            setMessagesStatus('loading')
+        }
+
+        // Channels and messages are independent: load them in parallel so the
+        // first screen does not wait for two cold API round-trips.
+        const channelsPromise = fetchChannels()
+        fetchMessages(channel, true, hasCachedMessages)
+        const list = await channelsPromise
+        if (list && !list.some((item) => item.name === channel)) {
+            changeChannel('general')
+        }
     }
 
     const applyProfile = (username) => {
@@ -485,27 +668,36 @@ const Home = () => {
         }
     }
 
-    const fetchChannels = async (silent = false) => {
+    const fetchChannels = (silent = false) => {
+        if (channelsRequestRef.current) return channelsRequestRef.current
         if (!silent) setChannelsStatus((current) => (current === 'ready' ? current : 'loading'))
-        try {
-            const res = await axios.get(config.api_url + '/api/channels')
-            const list = Array.isArray(res.data.channels) ? res.data.channels : []
-            if (!list.some((channel) => channel.name === 'general')) {
-                list.unshift({ name: 'general', createdAt: null })
+        const request = (async () => {
+            try {
+                const res = await axios.get(config.api_url + '/api/channels')
+                const list = Array.isArray(res.data.channels) ? res.data.channels : []
+                if (!list.some((channel) => channel.name === 'general')) {
+                    list.unshift({ name: 'general', createdAt: null })
+                }
+                const sorted = sortChannels(list)
+                setChannels(sorted)
+                setChannelsStatus('ready')
+                cacheChannels(sorted)
+                return sorted
+            } catch (error) {
+                // Keep the channels already on screen during a network blip;
+                // only seed #general when nothing has loaded yet.
+                setChannels((current) => (current && current.length)
+                    ? current
+                    : [{ name: 'general', createdAt: null }])
+                setChannelsStatus((current) => (current === 'ready' ? current : 'error'))
+                return null
             }
-            const sorted = sortChannels(list)
-            setChannels(sorted)
-            setChannelsStatus('ready')
-            return sorted
-        } catch (error) {
-            // Keep the channels already on screen during a network blip;
-            // only seed #general when nothing has loaded yet.
-            setChannels((current) => (current && current.length)
-                ? current
-                : [{ name: 'general', createdAt: null }])
-            setChannelsStatus((current) => (current === 'ready' ? current : 'error'))
-            return null
-        }
+        })()
+        channelsRequestRef.current = request
+        request.finally(() => {
+            if (channelsRequestRef.current === request) channelsRequestRef.current = undefined
+        })
+        return request
     }
 
     const refreshChannels = async () => {
@@ -526,51 +718,67 @@ const Home = () => {
         activeChannelRef.current = target
         setActiveChannel(target)
         localStorage.setItem('socket-chat-channel', target)
-        messagesRequestRef.current += 1
-        setMsg([])
-        setMessagesStatus('loading')
+        const cache = readChatCache(currentUserId())
+        const cachedMessages = cache && cache.messages[target]
+        const hasCachedMessages = Boolean(cachedMessages && cachedMessages.length)
+        setMsg(hasCachedMessages ? cachedMessages : [])
+        setMessagesStatus(hasCachedMessages ? 'ready' : 'loading')
         setNewBelow(false)
         setTypingName('')
         setSearchOpen(false)
         setSearchTerm('')
-        fetchMessages(target, true)
+        if (hasCachedMessages) scrollToBottomSoon()
+        fetchMessages(target, true, hasCachedMessages)
         setSidebarOpen(false)
         if (!isMobile && inputRef.current) inputRef.current.focus()
     }
 
-    const fetchMessages = async (channel = activeChannelRef.current, forceBottom = false, silent = false) => {
+    const fetchMessages = (channel = activeChannelRef.current, forceBottom = false, silent = false) => {
         const target = channel || 'general'
+        const inFlight = messagesRequestsRef.current[target]
+        if (inFlight && inFlight.requestId === messagesRequestRef.current) {
+            return inFlight.promise
+        }
         const requestId = ++messagesRequestRef.current
         const list = tchatRef.current
         const nearBottom = forceBottom || !list || (list.scrollHeight - list.scrollTop - list.clientHeight < 150)
         if (!silent) setMessagesStatus((current) => (current === 'ready' ? current : 'loading'))
-        try {
-            const res = await axios.get(config.api_url + '/api/messages', { params: { channel: target } })
+        const request = (async () => {
+            try {
+                const res = await axios.get(config.api_url + '/api/messages', { params: { channel: target } })
+                if (requestId !== messagesRequestRef.current) return
+                const incoming = Array.isArray(res.data.messages) ? res.data.messages : []
+                cacheMessages(target, incoming)
+                setMsg((current) => {
+                    // Keep messages still being sent so a socket refresh never
+                    // makes an optimistic message disappear before the POST ends.
+                    const pending = (current || []).filter((m) => m && m.pending && m.channel === target)
+                    return pending.length ? [...incoming, ...pending] : incoming
+                })
+                setMessagesStatus('ready')
+            } catch (error) {
+                if (requestId !== messagesRequestRef.current) return
+                // Only surface a blocking error when there is nothing to show;
+                // a failed background refresh must never hide existing messages.
+                setMessagesStatus((current) => (current === 'loading' ? 'error' : current))
+                if (navigator.onLine && !silent) pushToast('Unable to load messages.', 'error')
+                return
+            }
             if (requestId !== messagesRequestRef.current) return
-            const incoming = Array.isArray(res.data.messages) ? res.data.messages : []
-            setMsg((current) => {
-                // Keep messages still being sent so a socket refresh never
-                // makes an optimistic message disappear before the POST ends.
-                const pending = (current || []).filter((m) => m && m.pending && m.channel === target)
-                return pending.length ? [...incoming, ...pending] : incoming
-            })
-            setMessagesStatus('ready')
-        } catch (error) {
-            if (requestId !== messagesRequestRef.current) return
-            // Only surface a blocking error when there is nothing to show;
-            // a failed background refresh must never hide existing messages.
-            setMessagesStatus((current) => (current === 'loading' ? 'error' : current))
-            if (navigator.onLine && !silent) pushToast('Unable to load messages.', 'error')
-            return
-        }
-        if (requestId !== messagesRequestRef.current) return
-        if (nearBottom) {
-            const el = tchatRef.current
-            if (el) el.scrollTop = el.scrollHeight - el.clientHeight
-            setNewBelow(false)
-        } else {
-            setNewBelow(true)
-        }
+            if (nearBottom) {
+                const el = tchatRef.current
+                if (el) el.scrollTop = el.scrollHeight - el.clientHeight
+                setNewBelow(false)
+            } else {
+                setNewBelow(true)
+            }
+        })()
+        messagesRequestsRef.current[target] = { requestId, promise: request }
+        request.finally(() => {
+            const current = messagesRequestsRef.current[target]
+            if (current && current.requestId === requestId) delete messagesRequestsRef.current[target]
+        })
+        return request
     }
 
     const scheduleSync = (delay = 200) => {
@@ -585,10 +793,9 @@ const Home = () => {
             fetchChannels().then((list) => {
                 if (list && !list.some((channel) => channel.name === activeChannelRef.current)) {
                     changeChannel('general')
-                } else {
-                    fetchMessages(activeChannelRef.current)
                 }
             })
+            fetchMessages(activeChannelRef.current, false, true)
         }, delay)
     }
 
@@ -789,6 +996,7 @@ const Home = () => {
         })
             .then((res) => {
                 const saved = res.data && res.data.msg
+                if (saved && saved._id) appendCachedMessage(channel, saved)
                 if (activeChannelRef.current === channel) {
                     setMsg((current) => {
                         const withoutTemp = (current || []).filter((m) => m._id !== tempId)
@@ -799,7 +1007,11 @@ const Home = () => {
                     })
                 }
                 setSending(false)
-                if (socketRef.current) socketRef.current.emit("newMsg", { channel })
+                if (socketRef.current) {
+                    socketRef.current.emit("newMsg", saved && saved._id
+                        ? { channel, message: saved }
+                        : { channel })
+                }
                 if (!isMobile && inputRef.current) inputRef.current.focus()
             })
             .catch(() => {
@@ -835,6 +1047,7 @@ const Home = () => {
         const channel = activeChannelRef.current || 'general'
         if (!window.confirm(`/delete clears #${channel} for everyone. Continue?`)) return
         axios.delete(config.api_url + '/api/messages', { params: { channel } }).then(() => {
+            clearCachedMessages(channel)
             setMsg([])
             if (socketRef.current) socketRef.current.emit('resetTchat', { channel })
             pushToast(`#${channel} cleared.`, 'success')
@@ -847,6 +1060,7 @@ const Home = () => {
         axios.delete(config.api_url + '/api/messages/' + message._id, {
             data: { authorId: myUserId }
         }).then(() => {
+            removeCachedMessage(channel, message._id)
             setMsg((current) => current.filter((m) => m._id !== message._id))
             if (socketRef.current) socketRef.current.emit('newMsg', { channel })
             pushToast('Message deleted.', 'success')
@@ -871,10 +1085,12 @@ const Home = () => {
         axios.post(config.api_url + '/api/channels/new', { name })
             .then((res) => {
                 const channel = res.data && res.data.channel
-                setChannels((current) => sortChannels([
-                    ...current.filter((item) => item.name !== name),
+                const next = sortChannels([
+                    ...channels.filter((item) => item.name !== name),
                     channel || { name, createdAt: new Date().toISOString() },
-                ]))
+                ])
+                setChannels(next)
+                cacheChannels(next)
                 setCreatingChannel(false)
                 setNewChannelName('')
                 changeChannel(name)
@@ -893,7 +1109,10 @@ const Home = () => {
 
         axios.delete(config.api_url + '/api/channels/' + encodeURIComponent(name))
             .then(() => {
-                setChannels((current) => current.filter((channel) => channel.name !== name))
+                const next = channels.filter((channel) => channel.name !== name)
+                setChannels(next)
+                cacheChannels(next)
+                clearCachedMessages(name)
                 if (activeChannelRef.current === name) changeChannel('general')
                 if (socketRef.current) socketRef.current.emit('channelDeleted', { channel: name })
                 pushToast(`#${name} deleted.`, 'success')
