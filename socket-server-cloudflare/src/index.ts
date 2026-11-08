@@ -1,9 +1,17 @@
+import { handleApi, handleImageUpload } from './api';
+
 export interface Env {
   TCHAT: DurableObjectNamespace;
   ASSETS: {
     fetch: typeof fetch;
   };
   VERSION?: string;
+  GITHUB_TOKEN?: string;
+  GITHUB_REPO_OWNER?: string;
+  GITHUB_REPO_NAME?: string;
+  GITHUB_BRANCH?: string;
+  GITHUB_IMAGES_PATH?: string;
+  JWT_SECRET?: string;
 }
 
 type BinaryAttachment = ArrayBuffer | ArrayBufferView;
@@ -40,6 +48,7 @@ const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
 interface ChatMessagePayload {
   _id: string;
   message: string;
+  imageUrl?: string;
   author: string;
   authorId: string;
   channel: string;
@@ -80,6 +89,13 @@ const readMessage = (payload: unknown, fallbackChannel: string): ChatMessagePayl
   const authorId = typeof data.authorId === 'string'
     ? data.authorId.trim().slice(0, MAX_ID_LENGTH)
     : '';
+  // Keep attachments in the realtime payload so recipients render the image
+  // immediately instead of waiting for a refetch. Only allow our own storage.
+  const rawImageUrl = typeof data.imageUrl === 'string' ? data.imageUrl.trim().slice(0, 1000) : '';
+  const imageUrl = rawImageUrl.startsWith('/images/') ||
+    /^https:\/\/raw\.githubusercontent\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/[^/]+\/.+$/.test(rawImageUrl)
+    ? rawImageUrl
+    : '';
   const rawCreatedAt = typeof data.createdAt === 'string' ? new Date(data.createdAt) : null;
   const createdAt = rawCreatedAt && !Number.isNaN(rawCreatedAt.getTime())
     ? rawCreatedAt.toISOString()
@@ -88,6 +104,7 @@ const readMessage = (payload: unknown, fallbackChannel: string): ChatMessagePayl
   return {
     _id: id,
     message,
+    ...(imageUrl ? { imageUrl } : {}),
     author: author || 'Anonymous',
     authorId,
     channel,
@@ -100,7 +117,6 @@ const readMessage = (payload: unknown, fallbackChannel: string): ChatMessagePayl
 const ALLOWED_ORIGINS = new Set([
   'https://timotheegrollier.github.io',
   'https://socket-chat.sitizstorm.workers.dev',
-  'https://socket-tchat.onrender.com',
   'http://localhost:8787',
   'http://localhost:3000',
   'http://localhost:3001',
@@ -128,6 +144,18 @@ export default {
           },
         }
       );
+    }
+
+    // Image uploads talk to GitHub directly from the worker (token stays here).
+    if (url.pathname === '/api/images' || url.pathname.startsWith('/api/images/')) {
+      return handleImageUpload(request, env);
+    }
+
+    // The rest of the REST API runs in the Durable Object so it shares its
+    // SQLite storage with no extra Cloudflare resource.
+    if (url.pathname.startsWith('/api/')) {
+      const id = env.TCHAT.idFromName('tchat');
+      return env.TCHAT.get(id).fetch(request);
     }
 
     if (url.pathname.startsWith('/socket.io/')) {
@@ -163,11 +191,20 @@ export class ChatRoom {
   private rooms = new Map<string, Set<string>>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private userCount = 0;
+  private state: DurableObjectState;
+  private env: Env;
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this.env = env;
+  }
 
   async fetch(request: Request): Promise<Response> {
     const upgrade = request.headers.get('Upgrade');
     if (upgrade?.toLowerCase() !== 'websocket') {
-      return new Response('Expected a WebSocket upgrade.', { status: 400 });
+      // Non-realtime requests are the REST API. Running it here gives it the
+      // Durable Object's SQLite database without any extra Cloudflare resource.
+      return handleApi(request, this.state.storage.sql, this.env);
     }
 
     const pair = new WebSocketPair();

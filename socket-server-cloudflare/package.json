@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test:protocol": "node test/protocol.test.js",
+    "test:api": "node test/api.test.js",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

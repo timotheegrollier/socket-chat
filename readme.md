@@ -18,7 +18,7 @@ connections, and a pseudo that stays attached to every message.
 **Live:** https://timotheegrollier.github.io/socket-chat/
 
 The static frontend is hosted on **GitHub Pages**; the realtime socket layer
-runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
+and the REST API both run on **Cloudflare Workers + Durable Objects**.
 
 ---
 
@@ -44,7 +44,7 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 | Emoji picker | Quick reactions appended to the composer |
 | Toasts | Lightweight feedback for copy, delete, reset and reconnect events |
 | Input limits | 500 characters max, live counter, validated on client **and** server |
-| Auth | Signup / login with bcrypt + JWT (24 h), stored in `localStorage` |
+| Auth | Signup / login with PBKDF2 + JWT (24 h), stored in `localStorage` |
 | Chat reset | `/delete` command clears all messages for every connected client |
 | Responsive layout | Dark, Discord/Linear-style shell: presence sidebar, channel column, sticky composer, mobile drawer |
 
@@ -63,15 +63,15 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
         HTTPS (REST API)                 WebSocket /socket.io
                  │                                    │
                  ▼                                    ▼
-     ┌───────────────────────┐          ┌──────────────────────────────┐
-     │  Node.js / Express    │          │  Cloudflare Worker           │
-     │  Render               │          │  └─ Durable Object ChatRoom  │
-     │  └─ MongoDB Atlas     │          │     (in-memory socket state) │
-     │     users + messages  │          │                              │
-     └───────────────────────┘          └──────────────────────────────┘
+     ┌──────────────────────────────────────────────────────────────┐
+     │  Cloudflare Worker                                           │
+     │  ├─ /api/*  → Durable Object ChatRoom (SQLite: users,        │
+     │  │            channels, messages)                            │
+     │  ├─ /api/images → GitHub Contents API (token is a secret)    │
+     │  └─ /socket.io/* → Durable Object ChatRoom (socket state)    │
+     └──────────────────────────────────────────────────────────────┘
 
-        React SPA (GitHub Pages) ── REST ──► Render
-                                  ── WebSocket ──► Cloudflare Worker
+        React SPA (GitHub Pages) ── REST + WebSocket ──► Cloudflare Worker
 ```
 
 - The **React SPA** is built by Create React App and deployed to **GitHub Pages**
@@ -80,16 +80,17 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
   (`ChatRoom`), which implements the Engine.IO / Socket.IO protocol subset used
   by the client. It also keeps a self-contained copy of the static build through
   the `ASSETS` binding as a fallback.
-- The **REST API** (Node.js / Express + MongoDB) runs on **Render**. It handles
-  authentication and message persistence; the socket layer only notifies clients
-  so they refetch through the API.
-- **GitHub Actions** deploys the frontend to Pages, the Worker to Cloudflare and
-  Render redeploys the API on every push to `master`.
-- **GitHub image storage**: Images uploaded from the composer are stored as
-  assets in the repository via the GitHub Contents API and served via
-  `raw.githubusercontent.com`, fully contained in the GitHub ecosystem.
-- **Secure GitHub proxy**: For production deployments, a serverless proxy function
-  handles GitHub API calls securely, preventing exposure of GitHub tokens in the client.
+- The **REST API** runs inside the same Worker and stores users, channels and
+  messages in the **SQLite database of the `ChatRoom` Durable Object**. No
+  external database or additional Cloudflare resource is required.
+- **Authentication** uses PBKDF2 password hashing and HS256 JWTs, both through
+  the Workers WebCrypto API.
+- **GitHub image storage**: images uploaded from the composer are sent to
+  `POST /api/images`; the Worker commits them to the repository with the GitHub
+  Contents API and returns a `raw.githubusercontent.com` URL. The GitHub token
+  stays in a Worker secret and never reaches the browser.
+- **GitHub Actions** deploys the frontend to Pages and the Worker (API + socket
+  + static assets) to Cloudflare on every push to `master`.
 
 ---
 
@@ -99,7 +100,8 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
   socket.io-client, Axios
 - **Realtime:** Cloudflare Workers + Durable Objects (TypeScript), a custom
   implementation of the Socket.IO packet format (Engine.IO v4)
-- **API:** Node.js, Express, Mongoose, MongoDB Atlas, bcrypt, JWT
+- **API:** Cloudflare Workers + Durable Objects (SQLite storage), WebCrypto
+  (PBKDF2 + HS256 JWT)
 - **Tooling:** GitHub Actions (CI/CD), Wrangler 4, node:test-style protocol
   scripts, Testing Library
 
@@ -123,15 +125,19 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 │       ├── components/         # Nav, Login
 │       ├── pages/              # Home (chat), About, Signup
 │       └── styles/             # SCSS (chat, about, general, signup)
-├── controllers/                # Express controllers (messages, users)
-├── middleware/                 # auth, multer
-├── models/                     # Mongoose schemas (chatMessage, tchatUser)
-├── routes/                     # Express routers
-├── app.js                      # Express app
-├── server.js                   # HTTP/HTTPS + Socket.IO dev server
+├── controllers/                # Legacy Express controllers (not deployed)
+├── middleware/                 # Legacy Express middleware (not deployed)
+├── models/                     # Legacy Mongoose schemas (not deployed)
+├── routes/                     # Legacy Express routers (not deployed)
+├── app.js                      # Legacy Express app (not deployed)
+├── server.js                   # Legacy HTTP/HTTPS dev server (not deployed)
 └── socket-server-cloudflare/   # Cloudflare Worker + Durable Object
-    ├── src/index.ts
-    ├── test/protocol.test.js
+    ├── src/
+    │   ├── index.ts            # Worker entry, socket protocol, DO routing
+    │   └── api.ts              # REST API + GitHub image upload
+    ├── test/
+    │   ├── protocol.test.js    # socket protocol suite
+    │   └── api.test.js         # REST API suite
     └── wrangler.toml
 ```
 
@@ -142,31 +148,36 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 ### Prerequisites
 
 - Node.js 20+
-- A MongoDB Atlas connection string (or a local MongoDB)
 - Wrangler (installed locally in `socket-server-cloudflare`)
+- Optional: a GitHub token with `contents:write` if you want to test image
+  uploads locally
+- MongoDB Atlas is only needed to run the legacy Express backend; the production
+  stack does not use it.
 
 ### 1. Install
 
 ```bash
-npm install
 cd client && npm install && cd ..
 cd socket-server-cloudflare && npm install && cd ..
 ```
 
-### 2. Configure the API
+### 2. Configure the Worker
 
-Create a `.env` at the repository root:
+For local development, create `socket-server-cloudflare/.dev.vars`:
 
 ```dotenv
-DBUSER=<mongo-atlas-user>
-PORT=3001
-SSL_PORT=3002
+GITHUB_TOKEN=ghp_your_token_here
+# Optional: defaults to a development secret.
+JWT_SECRET=change-me
 ```
 
-> `app.js` builds the Mongo connection string from `DBUSER`.
-> `server.js` also starts an HTTPS server and therefore expects `privkey.pem` /
-> `cert.pem` at the repository root. For plain HTTP development, comment the
-> `sslServer` lines in `server.js`.
+Image uploads stay disabled (the API returns `503`) when `GITHUB_TOKEN` is
+missing, but everything else works. In production the token is stored as a
+Worker secret by the deploy workflow; it is never exposed to the client.
+
+Non-secret settings live in `socket-server-cloudflare/wrangler.toml`:
+`GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`, `GITHUB_BRANCH` and
+`GITHUB_IMAGES_PATH`.
 
 ### 3. Configure the client
 
@@ -179,27 +190,27 @@ cp client/src/config.example.json client/src/config.json
 
 ```json
 {
-    "api_url": "https://socket-tchat.onrender.com",
+    "api_url": "https://socket-chat.sitizstorm.workers.dev",
     "socket_url": "https://socket-chat.sitizstorm.workers.dev"
 }
 ```
 
-For purely local development, use `http://localhost:3001` for both entries (or
-keep the existing CRA `proxy` setting and leave `api_url` empty).
+For local development, point both entries to `http://127.0.0.1:8787`.
 
 ### 4. Run
 
 ```bash
-# Production-like: Express serves client/build
-npm run build
-npm start                # http://localhost:3001
-
-# Or, hot-reload frontend against the local API
-npm run client           # http://localhost:3000
-
-# Local realtime worker (instead of the deployed one)
+# Build the frontend, then run the full stack locally (API + socket + assets)
+cd client && npm run build && cd ..
 cd socket-server-cloudflare && npx wrangler dev --port 8787
+
+# Or, for frontend hot reload against the local Worker
+cd client && npm start             # http://localhost:3000
 ```
+
+The legacy Express API (`npm start` at the repository root) still exists for
+historical reference, but it is no longer deployed and no longer used by the
+production client.
 
 ---
 
@@ -243,6 +254,9 @@ active channel, so messages sent while the page was frozen are not lost.
 
 ## REST API
 
+The API is implemented by the Worker (`socket-server-cloudflare/src/api.ts`) and
+persists data in the SQLite database of the `ChatRoom` Durable Object.
+
 | Method | Route | Description |
 | --- | --- | --- |
 | `POST` | `/api/secure/signup` | Create an account (pseudo, password, confirmPass, terms) |
@@ -251,10 +265,11 @@ active channel, so messages sent while the page was frozen are not lost.
 | `GET` | `/api/channels` | List channels (`general` is always present) |
 | `POST` | `/api/channels/new` | Create a channel — `{ name }` (1-24 lowercase letters, numbers or hyphens) |
 | `DELETE` | `/api/channels/:name` | Delete a channel and all its messages (`general` is protected) |
-| `GET` | `/api/messages?channel=general` | List messages for a channel (`message`, `author`, `authorId`, `channel`, `createdAt`) |
-| `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId, channel }`; when `authorId` matches an account, the stored pseudo overrides `author` |
+| `GET` | `/api/messages?channel=general` | List messages for a channel (`message`, `imageUrl`, `author`, `authorId`, `channel`, `createdAt`) |
+| `POST` | `/api/messages/new` | Create a message — `{ message, author, authorId, channel, imageUrl? }`; when `authorId` matches an account, the stored pseudo overrides `author` |
 | `DELETE` | `/api/messages/:id` | Delete a message — `{ authorId }` must match the message owner |
 | `DELETE` | `/api/messages?channel=general` | Delete all messages in a channel (chat reset) |
+| `POST` | `/api/images` | Multipart upload (`image` field, max 8 MB). Commits the file to GitHub and returns `{ imageUrl }`; returns `503` when no token is configured |
 
 ---
 
@@ -274,11 +289,17 @@ npm run typecheck
 # Worker protocol tests — requires a local worker on :8787
 npx wrangler dev --port 8787 &
 SOCKET_URL=http://127.0.0.1:8787 npm run test:protocol
+
+# REST API tests (same local worker)
+API_URL=http://127.0.0.1:8787 npm run test:api
 ```
 
 The protocol suite covers the health endpoint, connection count, `newMsg`,
 `channelsChanged`, `channelDeleted`, `reset`, the presence list (`join` /
-`presence`), the typing indicator between two clients, and `stopTyping`.
+`presence`), the typing indicator between two clients, and `stopTyping`. The API
+suite covers signup validation and duplicate detection, login, profiles,
+channels, message CRUD and authorization, CORS preflight, and the image-upload
+guard when no GitHub token is configured.
 
 ---
 
@@ -289,11 +310,13 @@ The protocol suite covers the health endpoint, connection count, `newMsg`,
 - The **CI** workflow (`ci.yml`) runs on pull requests and on `master`:
   - `client`: install, generate `config.json` from repository variables, unit
     tests, production build.
-  - `worker`: install, TypeScript typecheck, start `wrangler dev`, protocol tests.
+  - `worker`: install, TypeScript typecheck, start `wrangler dev`, protocol tests
+    and REST API tests.
 - A pull request can only be merged when both checks are green.
 - Merging to `master` triggers two deployments:
-  - **Deploy** (`deploy.yml`) deploys the socket Worker to Cloudflare with
-    `cloudflare/wrangler-action`, then smoke-tests `/health`.
+  - **Deploy** (`deploy.yml`) deploys the Worker (API + socket + assets) to
+    Cloudflare with `cloudflare/wrangler-action`, pushes the `GITHUB_TOKEN`
+    Worker secret, then smoke-tests `/health` and `/api/channels`.
   - **Deploy frontend to GitHub Pages** (`pages.yml`) builds the React app and
     publishes `client/build` to GitHub Pages. The repository's Pages source must
     be set to **GitHub Actions**.
@@ -304,55 +327,26 @@ The protocol suite covers the health endpoint, connection count, `newMsg`,
 | --- | --- | --- |
 | Secret | `CLOUDFLARE_API_TOKEN` | API token with *Workers Scripts: Edit* permission |
 | Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id |
+| Secret | `GITHUB_IMAGES_TOKEN` | GitHub token with `contents:write` on this repository, used for image uploads. The workflow stores it in the Worker as `GITHUB_TOKEN` |
+| Secret (optional) | `JWT_SECRET` | Overrides the JWT signing secret (a development fallback is used when unset) |
 | Variable (optional) | `API_URL` | Overrides the REST API URL baked into the client |
 | Variable (optional) | `SOCKET_URL` | Overrides the socket URL baked into the client |
 
 If the Cloudflare secrets are missing, the deploy job is skipped with a warning
-annotation instead of failing the pipeline.
+annotation instead of failing the pipeline. If `GITHUB_IMAGES_TOKEN` is missing,
+the deploy still succeeds but image uploads return `503` until the secret is
+added; the workflow emits a warning annotation.
 
-### GitHub proxy configuration
+### Image storage configuration
 
-For production deployments with image uploads, you need to configure a GitHub API proxy:
-
-1. **Create a GitHub Personal Access Token** with repo scope
-2. **Deploy the serverless proxy** to your preferred platform (Vercel, Netlify, or Render)
-3. **Set environment variables** on your deployment platform:
-   - `GITHUB_TOKEN`: Your GitHub personal access token
-   - `GITHUB_REPO_OWNER`: Repository owner (default: timotheegrollier)
-   - `GITHUB_REPO_NAME`: Repository name (default: socket-chat)
-   - `GITHUB_BRANCH`: Branch to store images in (default: main)
-   - `GITHUB_IMAGES_PATH`: Path within repository to store images (default: images)
-
-4. **Update client configuration** with the proxy URL:
-   ```json
-   {
-     "github_proxy_url": "https://your-proxy-domain.com/github-proxy"
-   }
-   ```
-
-For detailed deployment instructions, see [DEPLOY_PROXY.md](./DEPLOY_PROXY.md).
-
-### Temporary direct GitHub API configuration
-
-For immediate testing or development, you can configure the client to use GitHub API directly:
-
-1. **Create a GitHub Personal Access Token** with repo scope
-2. **Update client configuration** with the token:
-   ```json
-   {
-     "github_token": "your_github_token_here",
-     "github_repo_owner": "timotheegrollier",
-     "github_repo_name": "socket-chat",
-     "github_branch": "main",
-     "github_images_path": "images"
-   }
-   ```
-3. **Use the provided script** to update the configuration:
-   ```bash
-   ./configure-github-token.sh your_github_token_here
-   ```
-
-**Note**: This approach exposes the GitHub token in client code, which is not suitable for production. Use the proxy approach for production deployments.
+Images are committed to this repository through the GitHub Contents API. The
+Worker uploads to `GITHUB_REPO_OWNER/GITHUB_REPO_NAME` on the dedicated
+`GITHUB_BRANCH` (default: `images`, created automatically from the default
+branch when missing) under `GITHUB_IMAGES_PATH`, and returns a
+`raw.githubusercontent.com` URL. The token is read from the `GITHUB_TOKEN`
+Worker secret at runtime and is never included in the client bundle. Keeping
+uploads on a separate branch leaves `master` protected and avoids running the
+deploy workflows for every image.
 
 ### Release flow
 
@@ -380,7 +374,6 @@ chat header. When bumping the version:
 
 ## Roadmap
 
-- Image attachments (upload + preview)
 - Multiple rooms and private conversations
 - Peer-to-peer file transfer over WebRTC (signalling already exists)
 - Native browser notifications

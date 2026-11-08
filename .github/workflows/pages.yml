@@ -22,7 +22,7 @@ jobs:
       run:
         working-directory: client
     env:
-      API_URL: ${{ vars.API_URL || 'https://socket-tchat.onrender.com' }}
+      API_URL: ${{ vars.API_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
       SOCKET_URL: ${{ vars.SOCKET_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
     steps:
       - uses: actions/checkout@v4

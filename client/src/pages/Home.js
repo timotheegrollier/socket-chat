@@ -1033,74 +1033,39 @@ const Home = () => {
         })
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
-        const uploadImageToGitHub = async () => {
-            // Validate GitHub token
-            if (!config.github_token) {
-                throw new Error('GitHub token is required for image uploads');
-            }
-            
-            // Validate image file
+        const uploadImageToApi = async () => {
             if (!imageFile) {
-                throw new Error('No image file selected');
+                throw new Error('No image file selected')
             }
-            
+
             // Validate file size (max 5MB)
             const maxSize = 5 * 1024 * 1024; // 5MB
             if (imageFile.size > maxSize) {
-                throw new Error('Image file is too large (max 5MB)');
+                throw new Error('Image file is too large (max 5MB)')
             }
-            
+
             // Validate file type
             const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
             if (!validTypes.includes(imageFile.type)) {
                 throw new Error('Invalid image file type. Supported formats: JPEG, PNG, GIF, WebP');
             }
-            
+
+            // The API uploads the file to the GitHub repository on our behalf so
+            // the GitHub token never reaches the browser.
+            const formData = new FormData()
+            formData.append('image', imageFile)
+
             try {
-                // Convert image file to base64
-                const reader = new FileReader()
-                await new Promise((resolve, reject) => {
-                    reader.onload = () => resolve(reader.result)
-                    reader.onerror = reject
-                    reader.readAsDataURL(imageFile)
-                })
-                
-                const base64Data = reader.result.split(',')[1] // Remove data URL prefix
-                
-                // Upload directly to GitHub API
-                await axios.post(
-                    `https://api.github.com/repos/${config.github_repo_owner}/${config.github_repo_name}/contents/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`,
-                    {
-                        message: `Upload ${imageFile.name}`,
-                        content: base64Data,
-                        branch: config.github_branch
-                    },
-                    {
-                        headers: {
-                            'Authorization': `token ${config.github_token}`,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    }
-                )
-                
-                // Return the raw URL from GitHub
-                return `https://raw.githubusercontent.com/${config.github_repo_owner}/${config.github_repo_name}/${config.github_branch}/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`
-            } catch (error) {
-                // Handle specific GitHub API errors
-                if (error.response) {
-                    const status = error.response.status;
-                    if (status === 401) {
-                        throw new Error('GitHub authentication failed. Please check your token.');
-                    } else if (status === 403) {
-                        throw new Error('GitHub API rate limit exceeded. Please try again later.');
-                    } else if (status === 404) {
-                        throw new Error('GitHub repository not found. Please check repository details.');
-                    } else if (status === 413) {
-                        throw new Error('Image file is too large for GitHub API.');
-                    }
+                const res = await axios.post(config.api_url + '/api/images', formData)
+                if (!res.data || !res.data.imageUrl) {
+                    throw new Error('The server did not return an image URL')
                 }
-                throw new Error(`Failed to upload image: ${error.message}`);
+                return res.data.imageUrl
+            } catch (error) {
+                if (error.response && error.response.data && error.response.data.error) {
+                    throw new Error(error.response.data.error)
+                }
+                throw new Error(error.message || 'Failed to upload image')
             }
         }
 
@@ -1110,8 +1075,8 @@ const Home = () => {
                 try {
                     setImageUploading(true)
                     setImageError('')
-                    // Upload the image to GitHub
-                    imageUrl = await uploadImageToGitHub()
+                    // Upload the image through the API
+                    imageUrl = await uploadImageToApi()
                 } catch (error) {
                     setImageError(error.message)
                     setToasts(prev => [...prev, { id: Date.now(), message: error.message, type: 'error' }])
