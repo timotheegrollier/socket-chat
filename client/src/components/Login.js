@@ -19,7 +19,7 @@ export default class Login extends Component {
     login(e) {
         e.preventDefault()
         const userCredentials = {
-            pseudo: document.getElementById('pseudo').value,
+            pseudo: document.getElementById('pseudo').value.trim(),
             password: document.getElementById('password').value
         }
         this.setState({ submitting: true, loginError: "" })
@@ -70,6 +70,9 @@ export default class Login extends Component {
                                 name="pseudo"
                                 className="input"
                                 autoComplete="username"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck="false"
                                 autoFocus
                                 required
                             />

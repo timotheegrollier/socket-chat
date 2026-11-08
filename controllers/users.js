@@ -3,9 +3,17 @@ const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 
+const normalizePseudo = (value) => typeof value === 'string' ? value.trim() : '';
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const findUserByPseudo = (pseudo) => {
+    const clean = normalizePseudo(pseudo);
+    if (!clean) return Promise.resolve(null);
+    return User.findOne({ pseudo: new RegExp('^' + escapeRegex(clean) + '$', 'i') });
+};
+
 exports.signup = (req, res, next) => {
     const password = req.body.password
-    const pseudo = req.body.pseudo
+    const pseudo = normalizePseudo(req.body.pseudo)
     const terms = req.body.terms
     const confirmPass = req.body.confirmPass
 
@@ -26,24 +34,31 @@ exports.signup = (req, res, next) => {
     }
 
     // ENCODAGE
-        bcrypt.hash(password, 10)
-            .then(hash => {
-                const user = new User({
-                    pseudo: req.body.pseudo,
-                    password: hash,
-                    createdAt:req.body.createdAt
-                });
-                user.save()
-                    .then(() => res.status(201).json({ message: 'Utilisateur créé !' }))
-                    .catch(error => res.status(400).json({ error }));
-            })
-            .catch(error => res.status(500).json({ error }));
+    // Reject case variants (Timo/timo) even when the stored unique index is
+    // still case-sensitive. The canonical display pseudo is preserved.
+    findUserByPseudo(pseudo)
+        .then((existing) => {
+            if (existing) {
+                return res.status(400).json({ error: 'Pseudo must be unique' });
+            }
+            return bcrypt.hash(password, 10)
+                .then(hash => {
+                    const user = new User({
+                        pseudo,
+                        password: hash,
+                        createdAt: req.body.createdAt || new Date()
+                    });
+                    return user.save();
+                })
+                .then(() => res.status(201).json({ message: 'Utilisateur créé !' }));
+        })
+        .catch(error => res.status(400).json({ error }));
     
 
 };
 
 exports.login = (req, res, next) => {
-    User.findOne({ pseudo: req.body.pseudo })
+    findUserByPseudo(req.body.pseudo)
         .then(user => {
             if (!user) {
                 return res.status(401).json({ error: 'You have entered an invalid username or password' })
