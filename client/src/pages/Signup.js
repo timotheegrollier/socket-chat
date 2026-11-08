@@ -21,7 +21,7 @@ const Signup = () => {
         setErrors()
         setUniqueErrors()
         const user = {
-            pseudo: pseudo.current.value,
+            pseudo: pseudo.current.value.trim(),
             password: password.current.value,
             confirmPass: confirmPassword.current.value,
             createdAt: new Date(),
@@ -75,7 +75,7 @@ const Signup = () => {
                     <form className="auth-form" onSubmit={newUser}>
                         <label className="field" htmlFor="pseudo">
                             Username <span className="field-hint">(4 to 12 characters)</span>
-                            <input ref={pseudo} type="text" name="pseudo" id="pseudo" className="input" autoComplete="username" required />
+                            <input ref={pseudo} type="text" name="pseudo" id="pseudo" className="input" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck="false" required />
                         </label>
 
                         <label className="field" htmlFor="password">

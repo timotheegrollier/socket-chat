@@ -4,7 +4,7 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.2.3** improves the PWA ergonomics on phones (Telegram-style):
+Version **2.2.4** makes login smoother and case-insensitive (you can sign in as `timo` even if the account is stored as `Timo`), while preserving the canonical display name. It also improves the PWA ergonomics on phones (Telegram-style):
 full-screen chat, safe areas and keyboard-aware layout, a compact drawer/composer,
 and message bubbles. It also keeps the previous improvements: instant local
 loading with background revalidation, whole-message socket delivery, identified
@@ -227,7 +227,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.2.3", "timestamp": "..." }
+{ "status": "ok", "version": "2.2.4", "timestamp": "..." }
 ```
 
 ---
@@ -313,7 +313,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.2.3**. It is displayed on the About page and in the
+The current version is **2.2.4**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and

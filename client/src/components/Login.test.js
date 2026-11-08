@@ -56,3 +56,44 @@ test('falls back to the typed pseudo when the API does not return one', async ()
   await waitFor(() => expect(getLogged).toHaveBeenCalledWith(true));
   expect(localStorage.getItem('socket-chat-username')).toBe('legacyuser');
 });
+
+test('trims the username before logging in and caching a fallback', async () => {
+  axios.post.mockResolvedValueOnce({
+    data: { token: 'jwt-token', userId: 'user-3' },
+  });
+  const getLogged = jest.fn();
+
+  render(
+    <MemoryRouter>
+      <Login getLogged={getLogged} />
+    </MemoryRouter>
+  );
+
+  fillForm('  timo  ', 'secret');
+  fireEvent.click(screen.getByRole('button', { name: /log in/i }));
+
+  await waitFor(() => expect(getLogged).toHaveBeenCalledWith(true));
+  expect(axios.post).toHaveBeenCalledWith(
+    expect.stringContaining('/api/secure/login'),
+    { pseudo: 'timo', password: 'secret' }
+  );
+  expect(localStorage.getItem('socket-chat-username')).toBe('timo');
+});
+
+test('prefers the canonical pseudo returned by the API over the typed casing', async () => {
+  axios.post.mockResolvedValueOnce({
+    data: { token: 'jwt-token', userId: 'user-4', pseudo: 'Timo' },
+  });
+
+  render(
+    <MemoryRouter>
+      <Login getLogged={jest.fn()} />
+    </MemoryRouter>
+  );
+
+  fillForm('timo', 'secret');
+  fireEvent.click(screen.getByRole('button', { name: /log in/i }));
+
+  await waitFor(() => expect(axios.post).toHaveBeenCalled());
+  expect(localStorage.getItem('socket-chat-username')).toBe('Timo');
+});
