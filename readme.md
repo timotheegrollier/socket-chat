@@ -4,7 +4,11 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.2.5** fixes desktop chat layout overflow (the message list scrolls inside the chat, not the window) and keeps the recent improvements: case-insensitive login with canonical display names, and Telegram-style PWA ergonomics on phones:
+Version **2.2.6** redesigns the desktop experience as a proper chat workspace:
+a framed app shell, a branded sidebar, a channel header with presence, and a
+centered message column that scrolls inside the window while the composer stays
+anchored at the bottom. It keeps the recent improvements: case-insensitive login
+with canonical display names, and Telegram-style PWA ergonomics on phones:
 full-screen chat, safe areas and keyboard-aware layout, a compact drawer/composer,
 and message bubbles. It also keeps the previous improvements: instant local
 loading with background revalidation, whole-message socket delivery, identified
@@ -227,7 +231,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.2.5", "timestamp": "..." }
+{ "status": "ok", "version": "2.2.6", "timestamp": "..." }
 ```
 
 ---
@@ -313,7 +317,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.2.5**. It is displayed on the About page and in the
+The current version is **2.2.6**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and

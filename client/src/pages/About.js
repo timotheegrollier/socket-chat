@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.5';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.6';
 
 const NEW_IN_V2 = [
     {
@@ -64,8 +64,8 @@ const NEW_IN_V2 = [
     },
     {
         icon: '📐',
-        title: 'Rebuilt layout',
-        text: 'A real chat window: sticky composer, bubbles with avatars, status header and a smart scroll — open history without being yanked to the bottom, then jump back with one click.',
+        title: 'Desktop chat workspace',
+        text: 'A framed app shell with a branded sidebar, channel header and presence avatars. Messages live in a centered column that scrolls inside the window, while the composer stays anchored at the bottom — no more page scrolling at any screen size.',
     },
     {
         icon: '📏',
