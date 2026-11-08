@@ -1032,6 +1032,10 @@ const Home = () => {
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
         const uploadImageToGitHub = async () => {
+            if (!config.github_token) {
+                throw new Error('GitHub token is required for image uploads');
+            }
+            
             // Convert image file to base64
             const reader = new FileReader()
             await new Promise((resolve, reject) => {
@@ -1042,22 +1046,25 @@ const Home = () => {
             
             const base64Data = reader.result.split(',')[1] // Remove data URL prefix
             
-            // Upload via proxy
+            // Upload directly to GitHub API
             const response = await axios.post(
-                config.github_proxy_url || `${config.api_url}/github-proxy`,
+                `https://api.github.com/repos/${config.github_repo_owner}/${config.github_repo_name}/contents/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`,
                 {
-                    image: base64Data,
-                    imageName: imageFile.name
+                    message: `Upload ${imageFile.name}`,
+                    content: base64Data,
+                    branch: config.github_branch
                 },
                 {
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Authorization': `token ${config.github_token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/vnd.github.v3+json'
                     }
                 }
             )
             
-            // Return the image URL from the proxy response
-            return response.data.imageUrl
+            // Return the raw URL from GitHub
+            return `https://raw.githubusercontent.com/${config.github_repo_owner}/${config.github_repo_name}/${config.github_branch}/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`
         }
 
         const send = async () => {
