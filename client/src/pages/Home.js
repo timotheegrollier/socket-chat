@@ -1049,7 +1049,7 @@ const Home = () => {
             )
             const content = res.data
             // content.download_url is usually something like https://github.com/.../download/...
-            const downloadUrl = content.download_url || content.url
+
             // For raw content: https://raw.githubusercontent.com/owner/repo/branch/path/to/file
             const rawUrl = 'https://raw.githubusercontent.com/' + config.github_repo_owner +
                 '/' + config.github_repo_name +
