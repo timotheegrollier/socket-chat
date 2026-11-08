@@ -1034,7 +1034,7 @@ const Home = () => {
         const uploadImageToGitHub = async () => {
             const formData = new FormData()
             formData.append('image', imageFile)
-            const res = await axios.post(
+            await axios.post(
                 'https://api.github.com/repos/' + config.github_repo_owner +
                 '/' + config.github_repo_name +
                 '/contents/' + config.github_images_path +
