@@ -327,13 +327,13 @@ guard when no GitHub token is configured.
 | --- | --- | --- |
 | Secret | `CLOUDFLARE_API_TOKEN` | API token with *Workers Scripts: Edit* permission |
 | Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id |
-| Secret | `GITHUB_IMAGES_TOKEN` | GitHub token with `contents:write` on this repository, used for image uploads. The workflow stores it in the Worker as `GITHUB_TOKEN` |
+| Secret | `GH_IMAGES_TOKEN` | GitHub token with `contents:write` on this repository, used for image uploads. The workflow stores it in the Worker as `GITHUB_TOKEN` |
 | Secret (optional) | `JWT_SECRET` | Overrides the JWT signing secret (a development fallback is used when unset) |
 | Variable (optional) | `API_URL` | Overrides the REST API URL baked into the client |
 | Variable (optional) | `SOCKET_URL` | Overrides the socket URL baked into the client |
 
 If the Cloudflare secrets are missing, the deploy job is skipped with a warning
-annotation instead of failing the pipeline. If `GITHUB_IMAGES_TOKEN` is missing,
+annotation instead of failing the pipeline. If `GH_IMAGES_TOKEN` is missing,
 the deploy still succeeds but image uploads return `503` until the secret is
 added; the workflow emits a warning annotation.
 

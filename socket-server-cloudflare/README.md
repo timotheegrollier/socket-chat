@@ -112,4 +112,4 @@ cd ../socket-server-cloudflare && npx wrangler deploy
 ```
 
 Required GitHub secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and
-`GITHUB_IMAGES_TOKEN` (GitHub token with `contents:write`).
+`GH_IMAGES_TOKEN` (GitHub token with `contents:write`).

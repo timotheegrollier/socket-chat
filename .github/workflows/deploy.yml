@@ -21,7 +21,7 @@ jobs:
       CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       API_URL: ${{ vars.API_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
       SOCKET_URL: ${{ vars.SOCKET_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
-      GITHUB_IMAGES_TOKEN: ${{ secrets.GITHUB_IMAGES_TOKEN }}
+      GITHUB_IMAGES_TOKEN: ${{ secrets.GH_IMAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,7 +60,7 @@ jobs:
       - name: Warn when the GitHub image token is missing
         if: env.CF_API_TOKEN != '' && env.GITHUB_IMAGES_TOKEN == ''
         run: |
-          echo "::warning title=Image upload disabled::Add GITHUB_IMAGES_TOKEN (a fine-grained or classic token with contents:write on this repository) in Settings -> Secrets and variables -> Actions, then re-run this workflow."
+          echo "::warning title=Image upload disabled::Add GH_IMAGES_TOKEN (a fine-grained or classic token with contents:write on this repository) in Settings -> Secrets and variables -> Actions, then re-run this workflow."
 
       - name: Push worker secrets
         if: env.CF_API_TOKEN != '' && env.GITHUB_IMAGES_TOKEN != ''
