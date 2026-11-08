@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.6';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.7';
 const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
@@ -1369,12 +1369,12 @@ const Home = () => {
                         <div className="sidebar-section sidebar-online">
                             <span className="sidebar-label">Online — {onlineCount}</span>
                             <ul className="presence-list">
-                                {onlineUsers.length > 0 ? onlineUsers.map((online) => (
+                                {onlineUsers.length > 0 ? Array.from(new Map(onlineUsers.map(u => [u.name, u])).values()).map((online) => (
                                     <li
                                         key={online.id}
                                         className={'presence-item' + (online.id === socketId ? ' self' : '')}
                                     >
-                                        <span className="presence-avatar">{initials(online.name)}</span>
+                                        <span className="presence-avatar" style={{ background: avatarColor(online.name) }}>{initials(online.name)}</span>
                                         <span className="presence-name">
                                             {online.name || 'Anonymous'}
                                             {online.id === socketId ? ' (you)' : ''}

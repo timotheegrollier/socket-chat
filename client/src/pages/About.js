@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.6';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.7';
 
 const NEW_IN_V2 = [
     {
@@ -66,6 +66,11 @@ const NEW_IN_V2 = [
         icon: '📐',
         title: 'Desktop chat workspace',
         text: 'A framed app shell with a branded sidebar, channel header and presence avatars. Messages live in a centered column that scrolls inside the window, while the composer stays anchored at the bottom — no more page scrolling at any screen size.',
+    },
+    {
+        icon: '🫧',
+        title: 'Sidebar polish (2.2.7)',
+        text: 'Each online contact appears only once in the sidebar presence list with their own avatar color. Identity, About and logout stay in the sidebar so the chat view keeps its full height.',
     },
     {
         icon: '📏',
