@@ -3,6 +3,7 @@ export interface Env {
   ASSETS: {
     fetch: typeof fetch;
   };
+  CHAT_IMAGES: R2Bucket;
   VERSION?: string;
 }
 
@@ -128,6 +129,14 @@ export default {
           },
         }
       );
+    }
+
+    if (url.pathname === '/api/images/upload' && request.method === 'POST') {
+      return handleImageUpload(request, env);
+    }
+
+    if (url.pathname.startsWith('/api/images/') && request.method === 'GET') {
+      return serveImage(request, env, url);
     }
 
     if (url.pathname.startsWith('/socket.io/')) {
@@ -667,4 +676,79 @@ export class ChatRoom {
       if (client) this.sendEvent(client, eventName, payload);
     }
   }
+}
+
+async function handleImageUpload(request: Request, env: Env): Promise<Response> {
+  const origin = request.headers.get('Origin');
+  const corsHeaders = {
+    'access-control-allow-origin': origin ?? '*',
+    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-headers': 'content-type',
+  };
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  try {
+    const formData = await request.formData();
+    const file = formData.get('image') as File | null;
+    if (!file || !(file instanceof File)) {
+      return new Response(JSON.stringify({ error: 'Aucune image fournie' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    if (!file.type.startsWith('image/')) {
+      return new Response(JSON.stringify({ error: 'Type de fichier non supporté' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: 'Image trop volumineuse (max 8 Mo)' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    const safeName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const key = `chat/${crypto.randomUUID()}_${safeName}`;
+    await env.CHAT_IMAGES.put(key, file, {
+      httpMetadata: { contentType: file.type },
+    });
+
+    return new Response(
+      JSON.stringify({ url: `/api/images/${encodeURIComponent(key)}` }),
+      { status: 200, headers: { 'content-type': 'application/json', ...corsHeaders } }
+    );
+  } catch {
+    return new Response(JSON.stringify({ error: 'Erreur lors de l envoi de l image' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json', ...corsHeaders },
+    });
+  }
+}
+
+async function serveImage(request: Request, env: Env, url: URL): Promise<Response> {
+  const key = decodeURIComponent(url.pathname.slice('/api/images/'.length));
+  if (!key) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  const object = await env.CHAT_IMAGES.get(key);
+  if (!object) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  return new Response(object.body, {
+    status: 200,
+    headers: {
+      'content-type': object.httpMetadata?.contentType ?? 'application/octet-stream',
+      'cache-control': 'public, max-age=31536000, immutable',
+      'access-control-allow-origin': '*',
+    },
+  });
 }

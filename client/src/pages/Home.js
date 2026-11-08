@@ -1031,24 +1031,26 @@ const Home = () => {
         })
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
-        const send = () => {
+        const uploadImage = async () => {
+            const form = new FormData()
+            form.append('image', imageFile)
+            const res = await axios.post(config.socket_url + '/api/images/upload', form)
+            return res.data && res.data.url ? res.data.url : ''
+        }
+
+        const send = async () => {
+            let imageUrl = ''
             if (imageFile) {
-                // Multipart upload for messages with an image attachment.
-                const form = new FormData()
-                form.append('image', imageFile)
-                form.append('message', text)
-                form.append('author', author)
-                form.append('authorId', myUserId || '')
-                form.append('channel', channel)
-                return axios.post(config.api_url + '/api/messages/new', form, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                })
+                // Upload the image to Cloudflare Workers + R2 (instant deploy,
+                // no Render cold start), then persist the message with its URL.
+                imageUrl = await uploadImage()
             }
             return axios.post(config.api_url + '/api/messages/new', {
                 message: text,
                 author,
                 authorId: myUserId || '',
-                channel
+                channel,
+                ...(imageUrl ? { imageUrl } : {}),
             })
         }
 
@@ -1304,11 +1306,11 @@ const Home = () => {
                         {message.imagePreview || message.imageUrl ? (
                             <div className="msg-image">
                                 <img
-                                    src={message.imagePreview || config.api_url + message.imageUrl}
+                                    src={message.imagePreview || config.socket_url + message.imageUrl}
                                     alt={message.message || 'Image'}
                                     onClick={() => {
                                         // Open the image in a new tab for a full view.
-                                        const src = message.imagePreview || config.api_url + message.imageUrl
+                                        const src = message.imagePreview || config.socket_url + message.imageUrl
                                         if (src) window.open(src, '_blank')
                                     }}
                                 />
