@@ -1,5 +1,4 @@
 const https = require('https');
-const crypto = require('crypto');
 
 // GitHub configuration - these should be environment variables in production
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
@@ -42,31 +41,6 @@ function makeRequest(options, data) {
   });
 }
 
-// Upload image to GitHub
-async function uploadImageToGitHub(imageFile, imageName) {
-  const formData = new FormData();
-  formData.append('image', imageFile);
-  
-  const options = {
-    hostname: 'api.github.com',
-    path: `/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${GITHUB_IMAGES_PATH}/${encodeURIComponent(imageName)}`,
-    method: 'POST',
-    headers: {
-      'Authorization': `token ${GITHUB_TOKEN}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/vnd.github.v3+json'
-    }
-  };
-  
-  const data = JSON.stringify({
-    message: `Upload ${imageName}`,
-    content: imageFile.toString('base64'),
-    branch: GITHUB_BRANCH
-  });
-  
-  return makeRequest(options, data);
-}
-
 // Get image URL from GitHub
 function getImageUrl(imageName) {
   return `https://raw.githubusercontent.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/${GITHUB_BRANCH}/${GITHUB_IMAGES_PATH}/${encodeURIComponent(imageName)}`;
@@ -93,11 +67,26 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'Image and image name are required' });
       }
       
-      // Convert base64 to buffer
-      const imageBuffer = Buffer.from(image, 'base64');
+      // Prepare GitHub API request
+      const options = {
+        hostname: 'api.github.com',
+        path: `/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${GITHUB_IMAGES_PATH}/${encodeURIComponent(imageName)}`,
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      };
+      
+      const data = JSON.stringify({
+        message: `Upload ${imageName}`,
+        content: image,
+        branch: GITHUB_BRANCH
+      });
       
       // Upload to GitHub
-      const result = await uploadImageToGitHub(imageBuffer, imageName);
+      const result = await makeRequest(options, data);
       
       // Get the public URL
       const imageUrl = getImageUrl(imageName);

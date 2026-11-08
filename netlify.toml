@@ -1,0 +1,19 @@
+[build]
+  command = "npm install"
+  publish = "."
+
+[[functions]]
+  path = "github-proxy"
+  runtime = "nodejs16.x"
+  environment = [
+    { key = "GITHUB_TOKEN", value = "@github_token" },
+    { key = "GITHUB_REPO_OWNER", value = "timotheegrollier" },
+    { key = "GITHUB_REPO_NAME", value = "socket-chat" },
+    { key = "GITHUB_BRANCH", value = "main" },
+    { key = "GITHUB_IMAGES_PATH", value = "images" }
+  ]
+
+[dev]
+  command = "npm run dev"
+  port = 9000
+  publish = "."
