@@ -1047,7 +1047,7 @@ const Home = () => {
             const base64Data = reader.result.split(',')[1] // Remove data URL prefix
             
             // Upload directly to GitHub API
-            const response = await axios.post(
+            await axios.post(
                 `https://api.github.com/repos/${config.github_repo_owner}/${config.github_repo_name}/contents/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`,
                 {
                     message: `Upload ${imageFile.name}`,
