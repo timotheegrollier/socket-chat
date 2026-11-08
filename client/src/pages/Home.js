@@ -1031,24 +1031,46 @@ const Home = () => {
         })
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
-        const send = () => {
+        const uploadImageToGitHub = async () => {
+            const formData = new FormData()
+            formData.append('image', imageFile)
+            const res = await axios.post(
+                'https://api.github.com/repos/' + config.github_repo_owner +
+                '/' + config.github_repo_name +
+                '/contents/' + config.github_images_path +
+                '/' + encodeURIComponent(imageFile.name),
+                formData,
+                {
+                    headers: {
+                        'Authorization': 'token ' + config.github_token,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            )
+            const content = res.data
+            // content.download_url is usually something like https://github.com/.../download/...
+            const downloadUrl = content.download_url || content.url
+            // For raw content: https://raw.githubusercontent.com/owner/repo/branch/path/to/file
+            const rawUrl = 'https://raw.githubusercontent.com/' + config.github_repo_owner +
+                '/' + config.github_repo_name +
+                '/' + config.github_branch +
+                '/' + config.github_images_path +
+                '/' + encodeURIComponent(imageFile.name)
+            return rawUrl
+        }
+
+        const send = async () => {
+            let imageUrl = ''
             if (imageFile) {
-                // Multipart upload for messages with an image attachment.
-                const form = new FormData()
-                form.append('image', imageFile)
-                form.append('message', text)
-                form.append('author', author)
-                form.append('authorId', myUserId || '')
-                form.append('channel', channel)
-                return axios.post(config.api_url + '/api/messages/new', form, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                })
+                // Upload the image to GitHub
+                imageUrl = await uploadImageToGitHub()
             }
             return axios.post(config.api_url + '/api/messages/new', {
                 message: text,
                 author,
                 authorId: myUserId || '',
-                channel
+                channel,
+                ...(imageUrl ? { imageUrl } : {}),
             })
         }
 
@@ -1304,11 +1326,11 @@ const Home = () => {
                         {message.imagePreview || message.imageUrl ? (
                             <div className="msg-image">
                                 <img
-                                    src={message.imagePreview || config.api_url + message.imageUrl}
+                                    src={message.imagePreview || message.imageUrl}
                                     alt={message.message || 'Image'}
                                     onClick={() => {
                                         // Open the image in a new tab for a full view.
-                                        const src = message.imagePreview || config.api_url + message.imageUrl
+                                        const src = message.imagePreview || message.imageUrl
                                         if (src) window.open(src, '_blank')
                                     }}
                                 />
