@@ -330,6 +330,8 @@ For production deployments with image uploads, you need to configure a GitHub AP
    }
    ```
 
+For detailed deployment instructions, see [DEPLOY_PROXY.md](./DEPLOY_PROXY.md).
+
 ### Temporary direct GitHub API configuration
 
 For immediate testing or development, you can configure the client to use GitHub API directly:
