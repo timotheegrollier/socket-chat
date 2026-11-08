@@ -88,6 +88,8 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
 - **GitHub image storage**: Images uploaded from the composer are stored as
   assets in the repository via the GitHub Contents API and served via
   `raw.githubusercontent.com`, fully contained in the GitHub ecosystem.
+- **Secure GitHub proxy**: For production deployments, a serverless proxy function
+  handles GitHub API calls securely, preventing exposure of GitHub tokens in the client.
 
 ---
 
@@ -307,6 +309,26 @@ The protocol suite covers the health endpoint, connection count, `newMsg`,
 
 If the Cloudflare secrets are missing, the deploy job is skipped with a warning
 annotation instead of failing the pipeline.
+
+### GitHub proxy configuration
+
+For production deployments with image uploads, you need to configure a GitHub API proxy:
+
+1. **Create a GitHub Personal Access Token** with repo scope
+2. **Deploy the serverless proxy** to your preferred platform (Vercel, Netlify, or Render)
+3. **Set environment variables** on your deployment platform:
+   - `GITHUB_TOKEN`: Your GitHub personal access token
+   - `GITHUB_REPO_OWNER`: Repository owner (default: timotheegrollier)
+   - `GITHUB_REPO_NAME`: Repository name (default: socket-chat)
+   - `GITHUB_BRANCH`: Branch to store images in (default: main)
+   - `GITHUB_IMAGES_PATH`: Path within repository to store images (default: images)
+
+4. **Update client configuration** with the proxy URL:
+   ```json
+   {
+     "github_proxy_url": "https://your-proxy-domain.com/github-proxy"
+   }
+   ```
 
 ### Release flow
 
