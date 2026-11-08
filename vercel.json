@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "functions": {
+    "serverless/github-proxy.js": {
+      "runtime": "nodejs16.x"
+    }
+  },
+  "env": {
+    "GITHUB_TOKEN": "@github_token",
+    "GITHUB_REPO_OWNER": "timotheegrollier",
+    "GITHUB_REPO_NAME": "socket-chat",
+    "GITHUB_BRANCH": "main",
+    "GITHUB_IMAGES_PATH": "images"
+  }
+}

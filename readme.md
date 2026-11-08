@@ -330,6 +330,28 @@ For production deployments with image uploads, you need to configure a GitHub AP
    }
    ```
 
+### Temporary direct GitHub API configuration
+
+For immediate testing or development, you can configure the client to use GitHub API directly:
+
+1. **Create a GitHub Personal Access Token** with repo scope
+2. **Update client configuration** with the token:
+   ```json
+   {
+     "github_token": "your_github_token_here",
+     "github_repo_owner": "timotheegrollier",
+     "github_repo_name": "socket-chat",
+     "github_branch": "main",
+     "github_images_path": "images"
+   }
+   ```
+3. **Use the provided script** to update the configuration:
+   ```bash
+   ./configure-github-token.sh your_github_token_here
+   ```
+
+**Note**: This approach exposes the GitHub token in client code, which is not suitable for production. Use the proxy approach for production deployments.
+
 ### Release flow
 
 1. Create a branch, commit your changes and open a pull request against `master`.
