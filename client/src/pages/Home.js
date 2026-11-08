@@ -222,6 +222,7 @@ const Home = () => {
     const [imagePreview, setImagePreview] = useStateIfMounted('')
     const [imageFile, setImageFile] = useStateIfMounted(null)
     const [imageUploading, setImageUploading] = useStateIfMounted(false)
+    const [imageProcessing, setImageProcessing] = useStateIfMounted(false)
     const [imageError, setImageError] = useStateIfMounted('')
     const [toasts, setToasts] = useStateIfMounted([])
     const [channels, setChannels] = useStateIfMounted([{ name: 'general', createdAt: null }])
@@ -236,6 +237,7 @@ const Home = () => {
     const emojiRef = useRef()
     const emojiBtnRef = useRef()
     const imageInputRef = useRef()
+    const imagePreviewUrlRef = useRef('')
     const channelInputRef = useRef()
     const activeChannelRef = useRef(activeChannel)
     const messagesRequestRef = useRef(0)
@@ -943,7 +945,8 @@ const Home = () => {
         else stopTyping()
     }
 
-    const clearInput = () => {
+    const clearInput = (opts = {}) => {
+        const { keepImage = false } = opts
         if (inputRef.current) {
             inputRef.current.value = ''
             inputRef.current.style.height = 'auto'
@@ -951,30 +954,167 @@ const Home = () => {
         setCharCount(0)
         setShowEmoji(false)
         setSending(false)
-        clearImage()
+        if (keepImage) {
+            // The optimistic message still references the preview URL; detach it
+            // from the ref so selection/clear logic won't revoke it mid-flight.
+            imagePreviewUrlRef.current = ''
+            setImagePreview('')
+            setImageFile(null)
+            setImageError('')
+            if (imageInputRef.current) imageInputRef.current.value = ''
+        } else {
+            clearImage()
+        }
+    }
+
+    const revokeImagePreview = () => {
+        if (imagePreviewUrlRef.current) {
+            URL.revokeObjectURL(imagePreviewUrlRef.current)
+            imagePreviewUrlRef.current = ''
+        }
     }
 
     const clearImage = () => {
+        revokeImagePreview()
         setImagePreview('')
         setImageFile(null)
+        setImageError('')
         if (imageInputRef.current) imageInputRef.current.value = ''
     }
 
-    const onImageChange = (e) => {
+    // Resize/compress photos before upload so the worker→GitHub round-trip and
+    // raw.githubusercontent.com delivery stay fast. GIFs keep their animation.
+    // PNGs with transparency keep alpha (WebP/PNG); opaque photos become WebP/JPEG.
+    const optimizeImage = (file) => new Promise((resolve) => {
+        const isGif = file.type === 'image/gif'
+        if (isGif) {
+            resolve(file)
+            return
+        }
+
+        const img = new Image()
+        const objectUrl = URL.createObjectURL(file)
+        const cleanup = () => URL.revokeObjectURL(objectUrl)
+
+        const hasAlpha = (ctx, width, height) => {
+            try {
+                // Sample pixels for speed; a transparent PNG usually has alpha < 255.
+                const step = Math.max(1, Math.floor(Math.min(width, height) / 64))
+                const data = ctx.getImageData(0, 0, width, height).data
+                for (let y = 0; y < height; y += step) {
+                    for (let x = 0; x < width; x += step) {
+                        if (data[(y * width + x) * 4 + 3] < 250) return true
+                    }
+                }
+            } catch (e) {
+                return file.type === 'image/png'
+            }
+            return false
+        }
+
+        const toBlob = (canvas, mime, quality) => new Promise((res) => {
+            canvas.toBlob((blob) => res(blob || null), mime, quality)
+        })
+
+        img.onerror = () => { cleanup(); resolve(file) }
+        img.onload = async () => {
+            try {
+                const maxDim = 1440
+                let { width, height } = img
+                const scale = Math.min(1, maxDim / width, maxDim / height)
+                width = Math.max(1, Math.round(width * scale))
+                height = Math.max(1, Math.round(height * scale))
+
+                const canvas = document.createElement('canvas')
+                canvas.width = width
+                canvas.height = height
+                const ctx = canvas.getContext('2d', { alpha: true })
+                if (!ctx) { cleanup(); resolve(file); return }
+                ctx.drawImage(img, 0, 0, width, height)
+                cleanup()
+
+                const alpha = file.type === 'image/png' ? hasAlpha(ctx, width, height) : false
+                const supportsWebp = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0
+                const baseName = (file.name || 'image').replace(/\.[^/.]+$/, '') || 'image'
+
+                let candidates = []
+                if (alpha) {
+                    if (supportsWebp) candidates.push({ mime: 'image/webp', ext: 'webp', qualities: [0.92, 0.86, 0.8] })
+                    candidates.push({ mime: 'image/png', ext: 'png', qualities: [undefined] })
+                } else {
+                    if (supportsWebp) candidates.push({ mime: 'image/webp', ext: 'webp', qualities: [0.82, 0.74, 0.66, 0.58] })
+                    candidates.push({ mime: 'image/jpeg', ext: 'jpg', qualities: [0.84, 0.76, 0.68, 0.6] })
+                }
+
+                const targetBytes = 950 * 1024
+                let best = null
+                for (const candidate of candidates) {
+                    for (const quality of candidate.qualities) {
+                        // eslint-disable-next-line no-await-in-loop
+                        const blob = await toBlob(canvas, candidate.mime, quality)
+                        if (!blob) continue
+                        if (!best || blob.size < best.size) best = { blob, ext: candidate.ext, mime: candidate.mime }
+                        if (blob.size <= targetBytes) {
+                            best = { blob, ext: candidate.ext, mime: candidate.mime }
+                            break
+                        }
+                    }
+                    if (best && best.size <= targetBytes) break
+                }
+
+                if (!best || best.size >= file.size) {
+                    // Still prefer a resized file when the source was huge.
+                    if (best && scale < 1 && best.size < file.size * 0.98) {
+                        resolve(new File([best.blob], baseName + '.' + best.ext, { type: best.mime, lastModified: Date.now() }))
+                    } else {
+                        resolve(file)
+                    }
+                    return
+                }
+
+                resolve(new File([best.blob], baseName + '.' + best.ext, { type: best.mime, lastModified: Date.now() }))
+            } catch (e) {
+                cleanup()
+                resolve(file)
+            }
+        }
+
+        img.src = objectUrl
+    })
+
+    const onImageChange = async (e) => {
         const file = e.target.files && e.target.files[0]
+        // Allow picking the same file again after removing it.
+        if (imageInputRef.current) imageInputRef.current.value = ''
         if (!file) return
-        if (!file.type.startsWith('image/')) {
-            pushToast('Please select an image file (JPG, PNG, GIF, WEBP).', 'warning')
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if (!validTypes.includes(file.type)) {
+            pushToast('Please select an image (JPG, PNG, GIF or WEBP).', 'warning')
             return
         }
-        if (file.size > 8 * 1024 * 1024) {
-            pushToast('Image too large (max 8 MB).', 'warning')
+        if (file.size > 12 * 1024 * 1024) {
+            pushToast('Image too large (max 12 MB).', 'warning')
             return
         }
-        setImageFile(file)
-        const reader = new FileReader()
-        reader.onload = (ev) => setImagePreview(ev.target.result)
-        reader.readAsDataURL(file)
+
+        setImageError('')
+        setImageProcessing(true)
+        try {
+            const optimized = await optimizeImage(file)
+            if (optimized.size > 8 * 1024 * 1024) {
+                pushToast('Image is still too large after optimization (max 8 MB).', 'warning')
+                return
+            }
+            revokeImagePreview()
+            const previewUrl = URL.createObjectURL(optimized)
+            imagePreviewUrlRef.current = previewUrl
+            setImageFile(optimized)
+            setImagePreview(previewUrl)
+        } catch (error) {
+            pushToast('Could not read this image.', 'error')
+        } finally {
+            setImageProcessing(false)
+        }
     }
 
     const handleKeyDown = (e) => {
@@ -1007,6 +1147,7 @@ const Home = () => {
         const text = value.slice(0, MAX_MESSAGE_LENGTH)
         const channel = activeChannelRef.current || 'general'
         const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+        const localPreview = imagePreview || ''
         const optimistic = {
             _id: tempId,
             message: text,
@@ -1015,45 +1156,37 @@ const Home = () => {
             channel,
             createdAt: new Date().toISOString(),
             pending: true,
-            ...(imagePreview ? { imagePreview } : {}),
+            ...(localPreview ? { imagePreview: localPreview } : {}),
         }
 
         setSending(true)
         stopTyping()
 
         // Show the message immediately, before the API round-trip. The local
-        // image preview lets the sender see the attachment right away.
+        // preview makes the attachment appear instantly (no network wait).
         setMsg((current) => [...(current || []), optimistic])
         setMessagesStatus('ready')
         setNewBelow(false)
-        clearInput()
+        clearInput({ keepImage: Boolean(localPreview) })
         requestAnimationFrame(() => {
             const el = tchatRef.current
             if (el) el.scrollTop = el.scrollHeight - el.clientHeight
         })
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
+        const revokeLocalPreview = () => {
+            if (localPreview && localPreview.startsWith('blob:')) {
+                URL.revokeObjectURL(localPreview)
+            }
+        }
+
         const uploadImageToApi = async () => {
-            if (!imageFile) {
-                throw new Error('No image file selected')
-            }
-
-            // Validate file size (max 5MB)
-            const maxSize = 5 * 1024 * 1024; // 5MB
-            if (imageFile.size > maxSize) {
-                throw new Error('Image file is too large (max 5MB)')
-            }
-
-            // Validate file type
-            const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-            if (!validTypes.includes(imageFile.type)) {
-                throw new Error('Invalid image file type. Supported formats: JPEG, PNG, GIF, WebP');
-            }
+            if (!imageFile) throw new Error('No image file selected')
 
             // The API uploads the file to the GitHub repository on our behalf so
             // the GitHub token never reaches the browser.
             const formData = new FormData()
-            formData.append('image', imageFile)
+            formData.append('image', imageFile, imageFile.name || 'image.jpg')
 
             try {
                 const res = await axios.post(config.api_url + '/api/images', formData)
@@ -1102,9 +1235,10 @@ const Home = () => {
                     setMsg((current) => {
                         const withoutTemp = (current || []).filter((m) => m._id !== tempId)
                         if (!saved || !saved._id) return withoutTemp
-                        // A socket refresh may already have fetched the saved message.
                         if (withoutTemp.some((m) => m._id === saved._id)) return withoutTemp
-                        return [...withoutTemp, saved]
+                        // Keep the local preview so the sender never sees a loading flash
+                        // while raw.githubusercontent.com serves the new file.
+                        return [...withoutTemp, localPreview ? { ...saved, imagePreview: localPreview } : saved]
                     })
                 }
                 setSending(false)
@@ -1116,8 +1250,8 @@ const Home = () => {
                 if (!isMobile && inputRef.current) inputRef.current.focus()
             })
             .catch(() => {
+                revokeLocalPreview()
                 if (activeChannelRef.current === channel) {
-                    // Roll back the optimistic message and give the text/image back.
                     setMsg((current) => (current || []).filter((m) => m._id !== tempId))
                     if (inputRef.current && !inputRef.current.value) {
                         inputRef.current.value = text
@@ -1126,10 +1260,11 @@ const Home = () => {
                     }
                     // Re-attach the failed image so the user can retry.
                     if (imageFile) {
+                        revokeImagePreview()
+                        const previewUrl = URL.createObjectURL(imageFile)
+                        imagePreviewUrlRef.current = previewUrl
                         setImageFile(imageFile)
-                        const reader = new FileReader()
-                        reader.onload = (ev) => setImagePreview(ev.target.result)
-                        reader.readAsDataURL(imageFile)
+                        setImagePreview(previewUrl)
                     }
                 }
                 setSending(false)
@@ -1344,20 +1479,46 @@ const Home = () => {
                             </div>
                         )}
                         {message.imagePreview || message.imageUrl ? (
-                            <div className="msg-image">
-                                <img
-                                    src={message.imagePreview || message.imageUrl}
-                                    alt={message.message || 'Image'}
+                            <div className={'msg-image' + (message.pending ? ' is-pending' : '')}>
+                                <button
+                                    type="button"
+                                    className="msg-image-frame"
                                     onClick={() => {
-                                        // Open the image in a new tab for a full view.
-                                        const src = message.imagePreview || message.imageUrl
-                                        if (src) window.open(src, '_blank')
+                                        const src = message.imageUrl || message.imagePreview
+                                        if (src) window.open(src, '_blank', 'noopener,noreferrer')
                                     }}
-                                />
+                                    aria-label="Open image"
+                                >
+                                    <span className="msg-image-skeleton" aria-hidden="true"></span>
+                                    <img
+                                        src={message.imagePreview || message.imageUrl}
+                                        alt={message.message || 'Shared image'}
+                                        loading="lazy"
+                                        decoding="async"
+                                        onLoad={(e) => {
+                                            const frame = e.currentTarget.closest('.msg-image-frame')
+                                            if (frame) frame.classList.add('is-loaded')
+                                        }}
+                                        onError={(e) => {
+                                            const frame = e.currentTarget.closest('.msg-image-frame')
+                                            if (frame) frame.classList.add('is-error')
+                                            if (message.imagePreview && e.currentTarget.src !== message.imagePreview) {
+                                                e.currentTarget.src = message.imagePreview
+                                            }
+                                        }}
+                                    />
+                                    {message.pending && (
+                                        <span className="msg-image-badge" aria-label="Sending image">
+                                            <span className="msg-image-badge-dot"></span>
+                                            Sending
+                                        </span>
+                                    )}
+                                </button>
+                                {message.message ? <div className="msg-text msg-image-caption">{message.message}</div> : null}
                             </div>
-                        ) : (
+                        ) : message.message ? (
                             <div className="msg-text">{message.message}</div>
-                        )}
+                        ) : null}
                     </div>
                     <div className="msg-actions">
                         <button type="button" title="Copy message" onClick={() => copyMessage(message)}>
@@ -1715,18 +1876,30 @@ const Home = () => {
                                     onChange={onImageChange}
                                     style={{ display: 'none' }}
                                 />
-                                {imagePreview && (
-                                    <div className="image-preview">
-                                        <img src={imagePreview} alt="Attachment preview" />
-                                        <button
-                                            type="button"
-                                            className="image-preview-remove"
-                                            aria-label="Remove attachment"
-                                            title="Remove attachment"
-                                            onClick={(e) => { e.preventDefault(); clearImage(); }}
-                                        >
-                                            ×
-                                        </button>
+                                {(imagePreview || imageProcessing) && (
+                                    <div className={'image-preview' + (imageUploading ? ' is-uploading' : '') + (imageProcessing ? ' is-processing' : '')}>
+                                        {imagePreview ? (
+                                            <img src={imagePreview} alt="Attachment preview" decoding="async" />
+                                        ) : (
+                                            <div className="image-preview-placeholder" aria-hidden="true"></div>
+                                        )}
+                                        {(imageUploading || imageProcessing) && (
+                                            <div className="image-preview-status" aria-live="polite">
+                                                <span className="image-preview-spinner" aria-hidden="true"></span>
+                                                <span>{imageUploading ? 'Sending…' : 'Optimizing…'}</span>
+                                            </div>
+                                        )}
+                                        {!imageUploading && !imageProcessing && (
+                                            <button
+                                                type="button"
+                                                className="image-preview-remove"
+                                                aria-label="Remove attachment"
+                                                title="Remove attachment"
+                                                onClick={(e) => { e.preventDefault(); clearImage(); }}
+                                            >
+                                                ×
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 
@@ -1791,7 +1964,7 @@ const Home = () => {
                                         className="send-btn"
                                         aria-label="Send message"
                                         title="Send"
-                                        disabled={!charCount || sending || imageUploading}
+                                        disabled={(!charCount && !imageFile && !imagePreview) || sending || imageUploading || imageProcessing}
                                     >
                                         {imageUploading ? (
                                             <span className="spinner" aria-hidden="true"></span>
