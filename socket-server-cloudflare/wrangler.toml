@@ -13,6 +13,10 @@ binding = "ASSETS"
 name = "TCHAT"
 class_name = "ChatRoom"
 
+[[r2_buckets]]
+binding = "CHAT_IMAGES"
+bucket_name = "chat-images"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ChatRoom"]
