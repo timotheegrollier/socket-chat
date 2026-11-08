@@ -1,6 +1,6 @@
 {
   "name": "socket-chat-worker",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "private": true,
   "description": "Cloudflare Worker + Durable Object realtime server for Socket Chat",
   "scripts": {

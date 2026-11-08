@@ -104,6 +104,14 @@ a {
     min-height: 100dvh;
 }
 
+/* Chat view: keep everything inside the viewport so #tchat scrolls,
+   not the window. Auth/about pages keep the natural min-height. */
+#Home:has(.chat-shell) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* ============ app nav ============ */
 
 .app-nav {
