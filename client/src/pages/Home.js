@@ -1032,31 +1032,32 @@ const Home = () => {
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
         const uploadImageToGitHub = async () => {
-            const formData = new FormData()
-            formData.append('image', imageFile)
-            await axios.post(
-                'https://api.github.com/repos/' + config.github_repo_owner +
-                '/' + config.github_repo_name +
-                '/contents/' + config.github_images_path +
-                '/' + encodeURIComponent(imageFile.name),
-                formData,
+            // Convert image file to base64
+            const reader = new FileReader()
+            await new Promise((resolve, reject) => {
+                reader.onload = () => resolve(reader.result)
+                reader.onerror = reject
+                reader.readAsDataURL(imageFile)
+            })
+            
+            const base64Data = reader.result.split(',')[1] // Remove data URL prefix
+            
+            // Upload via proxy
+            const response = await axios.post(
+                config.github_proxy_url || `${config.api_url}/github-proxy`,
+                {
+                    image: base64Data,
+                    imageName: imageFile.name
+                },
                 {
                     headers: {
-                        'Authorization': 'token ' + config.github_token,
                         'Content-Type': 'application/json'
                     }
                 }
             )
-
-            // content.download_url is usually something like https://github.com/.../download/...
-
-            // For raw content: https://raw.githubusercontent.com/owner/repo/branch/path/to/file
-            const rawUrl = 'https://raw.githubusercontent.com/' + config.github_repo_owner +
-                '/' + config.github_repo_name +
-                '/' + config.github_branch +
-                '/' + config.github_images_path +
-                '/' + encodeURIComponent(imageFile.name)
-            return rawUrl
+            
+            // Return the image URL from the proxy response
+            return response.data.imageUrl
         }
 
         const send = async () => {

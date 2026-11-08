@@ -1,7 +1,7 @@
 {
     "api_url":"https://socket-tchat.onrender.com",
     "socket_url":"https://socket-chat.sitizstorm.workers.dev",
-    "github_token": "",
+    "github_proxy_url": "",
     "github_repo_owner": "timotheegrollier",
     "github_repo_name": "socket-chat",
     "github_branch": "main",

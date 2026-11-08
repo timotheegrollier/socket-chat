@@ -1,0 +1,16 @@
+{
+  "name": "github-proxy",
+  "version": "1.0.0",
+  "description": "Serverless proxy for GitHub API calls",
+  "main": "github-proxy.js",
+  "scripts": {
+    "start": "node github-proxy.js",
+    "dev": "node github-proxy.js"
+  },
+  "dependencies": {
+    "form-data": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
