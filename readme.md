@@ -85,6 +85,9 @@ runs on **Cloudflare Workers + Durable Objects**, and the REST API on Render.
   so they refetch through the API.
 - **GitHub Actions** deploys the frontend to Pages, the Worker to Cloudflare and
   Render redeploys the API on every push to `master`.
+- **GitHub image storage**: Images uploaded from the composer are stored as
+  assets in the repository via the GitHub Contents API and served via
+  `raw.githubusercontent.com`, fully contained in the GitHub ecosystem.
 
 ---
 

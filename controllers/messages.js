@@ -21,7 +21,10 @@ const channelFilter = (channel) => {
 
 exports.newMessage = (req, res, next) => {
     const message = typeof req.body.message === 'string' ? req.body.message.trim().slice(0, 500) : ''
-    const imageUrl = req.file ? '/images/' + req.file.filename : ''
+    // Support both multipart upload (req.file via multer) and JSON payload with imageUrl
+    const imageUrl = req.file
+        ? '/images/' + req.file.filename
+        : (typeof req.body.imageUrl === 'string' ? req.body.imageUrl : '')
 
     // A message must carry text and/or an image.
     if (!message && !imageUrl) {
