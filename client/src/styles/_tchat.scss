@@ -1536,6 +1536,19 @@
     min-height: 72px;
 }
 
+/* Image error message */
+.image-error {
+    background-color: #fee;
+    border: 1px solid #fcc;
+    border-radius: var(--radius);
+    color: #c33;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    text-align: center;
+    animation: slideDown 0.2s ease-out;
+}
+
 #emojiPicker {
     position: absolute;
     bottom: calc(100% + 6px);

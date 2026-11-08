@@ -221,6 +221,8 @@ const Home = () => {
     const [showClearDialog, setShowClearDialog] = useStateIfMounted(false)
     const [imagePreview, setImagePreview] = useStateIfMounted('')
     const [imageFile, setImageFile] = useStateIfMounted(null)
+    const [imageUploading, setImageUploading] = useStateIfMounted(false)
+    const [imageError, setImageError] = useStateIfMounted('')
     const [toasts, setToasts] = useStateIfMounted([])
     const [channels, setChannels] = useStateIfMounted([{ name: 'general', createdAt: null }])
     const [activeChannel, setActiveChannel] = useStateIfMounted(localStorage.getItem('socket-chat-channel') || 'general')
@@ -1032,46 +1034,91 @@ const Home = () => {
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
         const uploadImageToGitHub = async () => {
+            // Validate GitHub token
             if (!config.github_token) {
                 throw new Error('GitHub token is required for image uploads');
             }
             
-            // Convert image file to base64
-            const reader = new FileReader()
-            await new Promise((resolve, reject) => {
-                reader.onload = () => resolve(reader.result)
-                reader.onerror = reject
-                reader.readAsDataURL(imageFile)
-            })
+            // Validate image file
+            if (!imageFile) {
+                throw new Error('No image file selected');
+            }
             
-            const base64Data = reader.result.split(',')[1] // Remove data URL prefix
+            // Validate file size (max 5MB)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (imageFile.size > maxSize) {
+                throw new Error('Image file is too large (max 5MB)');
+            }
             
-            // Upload directly to GitHub API
-            await axios.post(
-                `https://api.github.com/repos/${config.github_repo_owner}/${config.github_repo_name}/contents/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`,
-                {
-                    message: `Upload ${imageFile.name}`,
-                    content: base64Data,
-                    branch: config.github_branch
-                },
-                {
-                    headers: {
-                        'Authorization': `token ${config.github_token}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/vnd.github.v3+json'
+            // Validate file type
+            const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!validTypes.includes(imageFile.type)) {
+                throw new Error('Invalid image file type. Supported formats: JPEG, PNG, GIF, WebP');
+            }
+            
+            try {
+                // Convert image file to base64
+                const reader = new FileReader()
+                await new Promise((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result)
+                    reader.onerror = reject
+                    reader.readAsDataURL(imageFile)
+                })
+                
+                const base64Data = reader.result.split(',')[1] // Remove data URL prefix
+                
+                // Upload directly to GitHub API
+                await axios.post(
+                    `https://api.github.com/repos/${config.github_repo_owner}/${config.github_repo_name}/contents/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`,
+                    {
+                        message: `Upload ${imageFile.name}`,
+                        content: base64Data,
+                        branch: config.github_branch
+                    },
+                    {
+                        headers: {
+                            'Authorization': `token ${config.github_token}`,
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    }
+                )
+                
+                // Return the raw URL from GitHub
+                return `https://raw.githubusercontent.com/${config.github_repo_owner}/${config.github_repo_name}/${config.github_branch}/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`
+            } catch (error) {
+                // Handle specific GitHub API errors
+                if (error.response) {
+                    const status = error.response.status;
+                    if (status === 401) {
+                        throw new Error('GitHub authentication failed. Please check your token.');
+                    } else if (status === 403) {
+                        throw new Error('GitHub API rate limit exceeded. Please try again later.');
+                    } else if (status === 404) {
+                        throw new Error('GitHub repository not found. Please check repository details.');
+                    } else if (status === 413) {
+                        throw new Error('Image file is too large for GitHub API.');
                     }
                 }
-            )
-            
-            // Return the raw URL from GitHub
-            return `https://raw.githubusercontent.com/${config.github_repo_owner}/${config.github_repo_name}/${config.github_branch}/${config.github_images_path}/${encodeURIComponent(imageFile.name)}`
+                throw new Error(`Failed to upload image: ${error.message}`);
+            }
         }
 
         const send = async () => {
             let imageUrl = ''
             if (imageFile) {
-                // Upload the image to GitHub
-                imageUrl = await uploadImageToGitHub()
+                try {
+                    setImageUploading(true)
+                    setImageError('')
+                    // Upload the image to GitHub
+                    imageUrl = await uploadImageToGitHub()
+                } catch (error) {
+                    setImageError(error.message)
+                    showToast(error.message, 'error')
+                    return Promise.reject(error)
+                } finally {
+                    setImageUploading(false)
+                }
             }
             return axios.post(config.api_url + '/api/messages/new', {
                 message: text,
@@ -1717,6 +1764,12 @@ const Home = () => {
                                         </button>
                                     </div>
                                 )}
+
+                                {imageError && (
+                                    <div className="image-error">
+                                        {imageError}
+                                    </div>
+                                )}
                                 {showEmoji && (
                                     <div id="emojiPicker" ref={emojiRef}>
                                         {EMOJIS.map((emoji) => (
@@ -1773,9 +1826,15 @@ const Home = () => {
                                         className="send-btn"
                                         aria-label="Send message"
                                         title="Send"
-                                        disabled={!charCount || sending}
+                                        disabled={!charCount || sending || imageUploading}
                                     >
-                                        {sending ? <span className="spinner" aria-hidden="true"></span> : <IconSend />}
+                                        {imageUploading ? (
+                                            <span className="spinner" aria-hidden="true"></span>
+                                        ) : sending ? (
+                                            <span className="spinner" aria-hidden="true"></span>
+                                        ) : (
+                                            <IconSend />
+                                        )}
                                     </button>
                                 </div>
 
