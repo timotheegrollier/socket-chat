@@ -1114,7 +1114,7 @@ const Home = () => {
                     imageUrl = await uploadImageToGitHub()
                 } catch (error) {
                     setImageError(error.message)
-                    showToast(error.message, 'error')
+                    setToasts(prev => [...prev, { id: Date.now(), message: error.message, type: 'error' }])
                     return Promise.reject(error)
                 } finally {
                     setImageUploading(false)
