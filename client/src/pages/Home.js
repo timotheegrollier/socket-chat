@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.8';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.9';
 const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
@@ -189,6 +189,12 @@ const IconLogout = () => (
     </svg>
 )
 
+const IconImage = () => (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+    </svg>
+)
+
 const Home = () => {
     const [msg, setMsg] = useStateIfMounted([])
     const [sending, setSending] = useStateIfMounted(false)
@@ -213,6 +219,8 @@ const Home = () => {
     const [searchTerm, setSearchTerm] = useStateIfMounted('')
     const [sidebarOpen, setSidebarOpen] = useStateIfMounted(false)
     const [showClearDialog, setShowClearDialog] = useStateIfMounted(false)
+    const [imagePreview, setImagePreview] = useStateIfMounted('')
+    const [imageFile, setImageFile] = useStateIfMounted(null)
     const [toasts, setToasts] = useStateIfMounted([])
     const [channels, setChannels] = useStateIfMounted([{ name: 'general', createdAt: null }])
     const [activeChannel, setActiveChannel] = useStateIfMounted(localStorage.getItem('socket-chat-channel') || 'general')
@@ -225,6 +233,7 @@ const Home = () => {
     const typingTimerRef = useRef()
     const emojiRef = useRef()
     const emojiBtnRef = useRef()
+    const imageInputRef = useRef()
     const channelInputRef = useRef()
     const activeChannelRef = useRef(activeChannel)
     const messagesRequestRef = useRef(0)
@@ -940,6 +949,30 @@ const Home = () => {
         setCharCount(0)
         setShowEmoji(false)
         setSending(false)
+        clearImage()
+    }
+
+    const clearImage = () => {
+        setImagePreview('')
+        setImageFile(null)
+        if (imageInputRef.current) imageInputRef.current.value = ''
+    }
+
+    const onImageChange = (e) => {
+        const file = e.target.files && e.target.files[0]
+        if (!file) return
+        if (!file.type.startsWith('image/')) {
+            pushToast('Please select an image file (JPG, PNG, GIF, WEBP).', 'warning')
+            return
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            pushToast('Image too large (max 8 MB).', 'warning')
+            return
+        }
+        setImageFile(file)
+        const reader = new FileReader()
+        reader.onload = (ev) => setImagePreview(ev.target.result)
+        reader.readAsDataURL(file)
     }
 
     const handleKeyDown = (e) => {
@@ -952,7 +985,7 @@ const Home = () => {
     const submitMessage = () => {
         if (sending) return
         const value = ((inputRef.current && inputRef.current.value) || '').trim()
-        if (!value) return
+        if (!value && !imageFile) return
 
         if (value.startsWith('/')) {
             runCommand(value)
@@ -980,12 +1013,14 @@ const Home = () => {
             channel,
             createdAt: new Date().toISOString(),
             pending: true,
+            ...(imagePreview ? { imagePreview } : {}),
         }
 
         setSending(true)
         stopTyping()
 
-        // Show the message immediately, before the API round-trip.
+        // Show the message immediately, before the API round-trip. The local
+        // image preview lets the sender see the attachment right away.
         setMsg((current) => [...(current || []), optimistic])
         setMessagesStatus('ready')
         setNewBelow(false)
@@ -996,12 +1031,28 @@ const Home = () => {
         })
         if (!isMobile && inputRef.current) inputRef.current.focus()
 
-        axios.post(config.api_url + '/api/messages/new', {
-            message: text,
-            author,
-            authorId: myUserId || '',
-            channel
-        })
+        const send = () => {
+            if (imageFile) {
+                // Multipart upload for messages with an image attachment.
+                const form = new FormData()
+                form.append('image', imageFile)
+                form.append('message', text)
+                form.append('author', author)
+                form.append('authorId', myUserId || '')
+                form.append('channel', channel)
+                return axios.post(config.api_url + '/api/messages/new', form, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                })
+            }
+            return axios.post(config.api_url + '/api/messages/new', {
+                message: text,
+                author,
+                authorId: myUserId || '',
+                channel
+            })
+        }
+
+        send()
             .then((res) => {
                 const saved = res.data && res.data.msg
                 if (saved && saved._id) appendCachedMessage(channel, saved)
@@ -1024,12 +1075,19 @@ const Home = () => {
             })
             .catch(() => {
                 if (activeChannelRef.current === channel) {
-                    // Roll back the optimistic message and give the text back.
+                    // Roll back the optimistic message and give the text/image back.
                     setMsg((current) => (current || []).filter((m) => m._id !== tempId))
                     if (inputRef.current && !inputRef.current.value) {
                         inputRef.current.value = text
                         setCharCount(text.length)
                         autoGrow()
+                    }
+                    // Re-attach the failed image so the user can retry.
+                    if (imageFile) {
+                        setImageFile(imageFile)
+                        const reader = new FileReader()
+                        reader.onload = (ev) => setImagePreview(ev.target.result)
+                        reader.readAsDataURL(imageFile)
                     }
                 }
                 setSending(false)
@@ -1243,7 +1301,21 @@ const Home = () => {
                                 )}
                             </div>
                         )}
-                        <div className="msg-text">{message.message}</div>
+                        {message.imagePreview || message.imageUrl ? (
+                            <div className="msg-image">
+                                <img
+                                    src={message.imagePreview || config.api_url + message.imageUrl}
+                                    alt={message.message || 'Image'}
+                                    onClick={() => {
+                                        // Open the image in a new tab for a full view.
+                                        const src = message.imagePreview || config.api_url + message.imageUrl
+                                        if (src) window.open(src, '_blank')
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            <div className="msg-text">{message.message}</div>
+                        )}
                     </div>
                     <div className="msg-actions">
                         <button type="button" title="Copy message" onClick={() => copyMessage(message)}>
@@ -1594,6 +1666,27 @@ const Home = () => {
                             </div>
 
                             <form id="messageForm" onSubmit={(e) => { e.preventDefault(); submitMessage() }}>
+                                <input
+                                    ref={imageInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={onImageChange}
+                                    style={{ display: 'none' }}
+                                />
+                                {imagePreview && (
+                                    <div className="image-preview">
+                                        <img src={imagePreview} alt="Attachment preview" />
+                                        <button
+                                            type="button"
+                                            className="image-preview-remove"
+                                            aria-label="Remove attachment"
+                                            title="Remove attachment"
+                                            onClick={(e) => { e.preventDefault(); clearImage(); }}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                )}
                                 {showEmoji && (
                                     <div id="emojiPicker" ref={emojiRef}>
                                         {EMOJIS.map((emoji) => (
@@ -1619,6 +1712,18 @@ const Home = () => {
                                         onClick={() => setShowEmoji(!showEmoji)}
                                     >
                                         😊
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="composer-btn"
+                                        aria-label="Add image"
+                                        title="Add image"
+                                        onClick={() => {
+                                            setShowEmoji(false)
+                                            imageInputRef.current && imageInputRef.current.click()
+                                        }}
+                                    >
+                                        <IconImage />
                                     </button>
 
                                     <textarea

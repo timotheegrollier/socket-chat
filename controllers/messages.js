@@ -20,13 +20,16 @@ const channelFilter = (channel) => {
 }
 
 exports.newMessage = (req, res, next) => {
-    const message = typeof req.body.message === 'string' ? req.body.message.trim().slice(0, 500) : '';
-    if (!message) {
-        return res.status(400).json({ error: 'Message vide !' });
+    const message = typeof req.body.message === 'string' ? req.body.message.trim().slice(0, 500) : ''
+    const imageUrl = req.file ? '/images/' + req.file.filename : ''
+
+    // A message must carry text and/or an image.
+    if (!message && !imageUrl) {
+        return res.status(400).json({ error: 'Message vide !' })
     }
 
-    const author = typeof req.body.author === 'string' ? req.body.author.trim().slice(0, 12) : '';
-    const authorId = typeof req.body.authorId === 'string' ? req.body.authorId.trim().slice(0, 64) : '';
+    const author = typeof req.body.author === 'string' ? req.body.author.trim().slice(0, 12) : ''
+    const authorId = typeof req.body.authorId === 'string' ? req.body.authorId.trim().slice(0, 64) : ''
     const channel = normalizeChannel(req.body.channel)
 
     // The stored pseudo is authoritative: the client may still be loading the
@@ -43,7 +46,13 @@ exports.newMessage = (req, res, next) => {
 
     resolveAuthor()
         .then((resolvedAuthor) => {
-            const newMessage = new Message({ message, author: resolvedAuthor, authorId, channel })
+            const newMessage = new Message({
+                message,
+                author: resolvedAuthor,
+                authorId,
+                channel,
+                ...(imageUrl ? { imageUrl } : {}),
+            })
             return newMessage.save()
         })
         .then((msg) => res.status(200).json({ msg }))
