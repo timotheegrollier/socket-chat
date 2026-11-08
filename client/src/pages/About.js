@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.8';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.9';
 
 const NEW_IN_V2 = [
     {
@@ -73,6 +73,11 @@ const NEW_IN_V2 = [
         text: 'Each online contact appears only once in the sidebar presence list with their own avatar color. Identity, About and logout stay in the sidebar so the chat view keeps its full height.',
     },
     {
+        icon: '🖼️',
+        title: 'Image sharing (2.2.9)',
+        text: 'Add an image to any message with the picture icon in the composer. A local preview appears before you send, and the uploaded image is shown as a bubble in the conversation — click it to open in full size.',
+    },
+    {
         icon: '🗑️',
         title: 'Clear chat button (2.2.8)',
         text: 'In #general, a trash icon in the header opens a confirmation dialog to clear every message in the channel at once — no more typing /delete.',
@@ -95,13 +100,11 @@ const TECH = [
 ];
 
 const ROADMAP = [
-    { icon: '🖼️', text: 'Image sharing (upload + preview in the chat)' },
     { icon: '👥', text: 'Multiple rooms & private messages' },
     { icon: '🤝', text: 'Peer-to-peer file transfer over WebRTC (signaling is already on the server)' },
     { icon: '🔔', text: 'Native browser notifications' },
     { icon: '🌗', text: 'Light / dark theme toggle' },
 ];
-
 const About = () => {
     const navigate = useNavigate()
     const [connected, setConnected] = useState(false);

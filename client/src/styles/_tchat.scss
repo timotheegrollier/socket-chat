@@ -1446,6 +1446,96 @@
     }
 }
 
+/* Image bubbles in the timeline */
+.msg-image {
+    margin: 4px 0 0;
+}
+
+.msg-image img {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    height: auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+
+    &:hover {
+        transform: scale(1.02);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+}
+
+.msg.own .msg-image img {
+    margin-left: auto;
+}
+
+.msg.pending .msg-image img {
+    opacity: 0.75;
+}
+
+/* Image attachment preview in the composer */
+.image-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding: 6px 8px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    max-width: 100%;
+}
+
+.image-preview img {
+    display: block;
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--surface-3);
+}
+
+.image-preview-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--surface-3);
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    margin-left: auto;
+    flex-shrink: 0;
+
+    &:hover {
+        background: var(--danger);
+        color: #fff;
+    }
+}
+
+/* Image button in the composer */
+.composer-btn + .composer-btn {
+    /* image button spacing handled by gap */
+}
+
+.composer-btn svg {
+    pointer-events: none;
+}
+
+/* When an image preview is present in the composer, give it enough room. */
+.image-preview + .composer,
+.composer:has(.image-preview) {
+    min-height: 72px;
+}
+
 #emojiPicker {
     position: absolute;
     bottom: calc(100% + 6px);

@@ -4,7 +4,7 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.2.8** redesigns the desktop experience as a proper chat workspace:
+Version **2.2.9** redesigns the desktop experience as a proper chat workspace:
 a framed app shell, a branded sidebar, a channel header with presence, and a
 centered message column that scrolls inside the window while the composer stays
 anchored at the bottom. It keeps the recent improvements: case-insensitive login
@@ -231,7 +231,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.2.8", "timestamp": "..." }
+{ "status": "ok", "version": "2.2.9", "timestamp": "..." }
 ```
 
 ---
@@ -317,7 +317,7 @@ annotation instead of failing the pipeline.
 
 ## Versioning
 
-The current version is **2.2.8**. It is displayed on the About page and in the
+The current version is **2.2.9**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and
