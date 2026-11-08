@@ -1047,7 +1047,7 @@ const Home = () => {
                     }
                 }
             )
-            const content = res.data
+
             // content.download_url is usually something like https://github.com/.../download/...
 
             // For raw content: https://raw.githubusercontent.com/owner/repo/branch/path/to/file
