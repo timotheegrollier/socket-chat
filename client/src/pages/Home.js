@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.5';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.6';
 const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
@@ -180,6 +180,12 @@ const IconCopy = () => (
 const IconTrash = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+    </svg>
+)
+
+const IconLogout = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
     </svg>
 )
 
@@ -1265,6 +1271,16 @@ const Home = () => {
                 <div className="chat-shell">
 
                     <aside className={'chat-sidebar' + (sidebarOpen ? ' open' : '')}>
+                        <div className="sidebar-brand">
+                            <Link to="/" className="sidebar-brand-link" aria-label="Socket Chat">
+                                <span className="nav-logo sidebar-logo" aria-hidden="true"></span>
+                                <span className="sidebar-brand-copy">
+                                    <strong>Socket Chat</strong>
+                                    <span>Realtime rooms</span>
+                                </span>
+                            </Link>
+                        </div>
+
                         <div className="sidebar-section sidebar-channels" aria-busy={channelsStatus === 'loading'}>
                             <span className="sidebar-label">
                                 <span>Channels</span>
@@ -1326,9 +1342,6 @@ const Home = () => {
                                             >
                                                 <span className="channel-hash">#</span>
                                                 <span className="channel-name">{channel.name}</span>
-                                                {channel.name === activeChannel && (
-                                                    <span className="badge-count">{onlineCount}</span>
-                                                )}
                                             </button>
                                             {channel.name !== 'general' && (
                                                 <button
@@ -1378,26 +1391,34 @@ const Home = () => {
 
                         <div className="sidebar-footer">
                             <div className="sidebar-user">
-                                <span className="presence-avatar accent">{initials(user && user.username)}</span>
-                                <div>
+                                <span className="presence-avatar accent sidebar-user-avatar">{initials(user && user.username)}</span>
+                                <div className="sidebar-user-meta">
                                     <strong>{user && user.username ? user.username : '…'}</strong>
-                                    <button
-                                        type="button"
-                                        className="sidebar-logout"
-                                        onClick={() => {
-                                            Object.keys(localStorage)
-                                                .filter((key) => key.indexOf('socket-chat-cache-v') === 0)
-                                                .forEach((key) => localStorage.removeItem(key))
-                                            localStorage.removeItem('JWT')
-                                            localStorage.removeItem(USERNAME_KEY)
-                                            window.location.reload()
-                                        }}
-                                    >
-                                        Log out
-                                    </button>
+                                    <span className={'sidebar-user-status' + (connectionState === 'live' ? ' live' : '')}>
+                                        <i aria-hidden="true"></i>
+                                        {connectionState === 'live' ? 'Online' : connectionLabel}
+                                    </span>
                                 </div>
                             </div>
-                            <Link to="/about" className="sidebar-version">v{APP_VERSION}</Link>
+                            <div className="sidebar-footer-actions">
+                                <Link to="/about" className="sidebar-version" title="About Socket Chat">v{APP_VERSION}</Link>
+                                <button
+                                    type="button"
+                                    className="sidebar-logout"
+                                    title="Log out"
+                                    aria-label="Log out"
+                                    onClick={() => {
+                                        Object.keys(localStorage)
+                                            .filter((key) => key.indexOf('socket-chat-cache-v') === 0)
+                                            .forEach((key) => localStorage.removeItem(key))
+                                        localStorage.removeItem('JWT')
+                                        localStorage.removeItem(USERNAME_KEY)
+                                        window.location.reload()
+                                    }}
+                                >
+                                    <IconLogout />
+                                </button>
+                            </div>
                         </div>
                     </aside>
 
@@ -1422,9 +1443,29 @@ const Home = () => {
                             </button>
 
                             <div className="chat-heading">
-                                <h1># {activeChannel}</h1>
-                                <p>{connectionState === 'live' ? `${onlineCount} online` : connectionLabel}</p>
+                                <span className="channel-avatar" aria-hidden="true">#</span>
+                                <div className="chat-heading-copy">
+                                    <h1>{activeChannel}</h1>
+                                    <p>{connectionState === 'live' ? `${onlineCount} online` : connectionLabel}</p>
+                                </div>
                             </div>
+
+                            {onlineUsers.length > 0 && (
+                                <div className="chat-presence-stack" aria-hidden="true">
+                                    {onlineUsers.slice(0, 3).map((online) => (
+                                        <span
+                                            key={online.id}
+                                            className="presence-mini"
+                                            style={{ background: avatarColor(online.name) }}
+                                        >
+                                            {initials(online.name)}
+                                        </span>
+                                    ))}
+                                    {onlineUsers.length > 3 && (
+                                        <span className="presence-mini more">+{onlineUsers.length - 3}</span>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="chat-actions">
                                 <button

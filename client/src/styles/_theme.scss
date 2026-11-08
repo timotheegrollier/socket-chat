@@ -22,8 +22,12 @@
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --radius: 12px;
     --radius-sm: 8px;
+    --radius-lg: 18px;
     --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45);
+    --shadow-app: 0 32px 90px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
     --nav-height: 60px;
+    --sidebar-width: 288px;
+    --chat-max: 960px;
 }
 
 @keyframes spin {

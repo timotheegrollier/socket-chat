@@ -104,12 +104,26 @@ a {
     min-height: 100dvh;
 }
 
-/* Chat view: keep everything inside the viewport so #tchat scrolls,
-   not the window. Auth/about pages keep the natural min-height. */
-#Home:has(.chat-shell) {
+/* Chat view: the app owns the viewport and only the message list scrolls.
+   The height must live on #root too, because it is the flex container that
+   would otherwise grow past the viewport with the message content. */
+#root:has(.chat-shell) {
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
+}
+
+#Home:has(.chat-shell) {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* In the chat, the sidebar carries the brand, account and About link, so
+   the global marketing nav would only steal vertical space. */
+#Home:has(.chat-shell) .app-nav {
+    display: none;
 }
 
 /* ============ app nav ============ */
@@ -259,12 +273,6 @@ a {
     }
 
     .nav-brand span:last-child {
-        display: none;
-    }
-
-    /* In the chat view, the global nav wastes precious vertical space on
-       phones. The sidebar keeps account/actions accessible. */
-    #Home:has(.chat-shell) .app-nav {
         display: none;
     }
 
