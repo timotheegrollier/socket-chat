@@ -6,7 +6,7 @@ import { useStateIfMounted } from "use-state-if-mounted";
 import Login from "../components/Login";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.7';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.8';
 const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
 const MAX_MESSAGE_LENGTH = 500;
@@ -212,6 +212,7 @@ const Home = () => {
     const [searchOpen, setSearchOpen] = useStateIfMounted(false)
     const [searchTerm, setSearchTerm] = useStateIfMounted('')
     const [sidebarOpen, setSidebarOpen] = useStateIfMounted(false)
+    const [showClearDialog, setShowClearDialog] = useStateIfMounted(false)
     const [toasts, setToasts] = useStateIfMounted([])
     const [channels, setChannels] = useStateIfMounted([{ name: 'general', createdAt: null }])
     const [activeChannel, setActiveChannel] = useStateIfMounted(localStorage.getItem('socket-chat-channel') || 'general')
@@ -416,6 +417,7 @@ const Home = () => {
                 setSearchOpen(false)
                 setSearchTerm('')
                 setSidebarOpen(false)
+                setShowClearDialog(false)
             }
         }
         document.addEventListener('keydown', onKey)
@@ -1051,7 +1053,6 @@ const Home = () => {
 
     const deleteTchat = () => {
         const channel = activeChannelRef.current || 'general'
-        if (!window.confirm(`/delete clears #${channel} for everyone. Continue?`)) return
         axios.delete(config.api_url + '/api/messages', { params: { channel } }).then(() => {
             clearCachedMessages(channel)
             setMsg([])
@@ -1476,6 +1477,17 @@ const Home = () => {
                                 >
                                     <IconSearch />
                                 </button>
+                                {activeChannel === 'general' && (
+                                    <button
+                                        type="button"
+                                        className="icon-btn"
+                                        aria-label="Clear the chat"
+                                        title="Clear all messages in #general"
+                                        onClick={() => setShowClearDialog(true)}
+                                    >
+                                        <IconTrash />
+                                    </button>
+                                )}
                                 <span
                                     className={'conn-pill ' + connectionClass}
                                     role="status"
@@ -1640,6 +1652,19 @@ const Home = () => {
                                 </div>
                             </form>
                         </div>
+
+                        {showClearDialog && (
+                            <div className="clear-overlay" onClick={() => setShowClearDialog(false)} role="dialog" aria-modal="true" aria-labelledby="clear-dialog-title">
+                                <div className="clear-dialog" onClick={(e) => e.stopPropagation()}>
+                                    <h3 id="clear-dialog-title">Clear #general?</h3>
+                                    <p>This will delete every message in this channel for everyone. It cannot be undone.</p>
+                                    <div className="clear-actions">
+                                        <button type="button" className="clear-btn clear-cancel" onClick={() => setShowClearDialog(false)}>Cancel</button>
+                                        <button type="button" className="clear-btn clear-danger" onClick={() => { setShowClearDialog(false); deleteTchat(); }}>Clear all messages</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="toast-stack" aria-live="polite">
                             {toasts.map((toast) => (

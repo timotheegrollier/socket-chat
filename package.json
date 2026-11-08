@@ -1,6 +1,6 @@
 {
   "name": "socket-chat",
-  "version": "2.2.7",
+  "version": "2.2.8",
   "description": "Real-time Socket.IO chat — React frontend, Express/MongoDB API and a Cloudflare Workers realtime layer",
   "main": "server.js",
   "scripts": {

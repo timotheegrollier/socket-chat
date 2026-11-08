@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.7';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.8';
 
 const NEW_IN_V2 = [
     {
@@ -71,6 +71,11 @@ const NEW_IN_V2 = [
         icon: '🫧',
         title: 'Sidebar polish (2.2.7)',
         text: 'Each online contact appears only once in the sidebar presence list with their own avatar color. Identity, About and logout stay in the sidebar so the chat view keeps its full height.',
+    },
+    {
+        icon: '🗑️',
+        title: 'Clear chat button (2.2.8)',
+        text: 'In #general, a trash icon in the header opens a confirmation dialog to clear every message in the channel at once — no more typing /delete.',
     },
     {
         icon: '📏',
