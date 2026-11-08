@@ -34,7 +34,7 @@ jobs:
 
       - name: Generate runtime config
         env:
-          API_URL: ${{ vars.API_URL || 'https://socket-tchat.onrender.com' }}
+          API_URL: ${{ vars.API_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
           SOCKET_URL: ${{ vars.SOCKET_URL || 'https://socket-chat.sitizstorm.workers.dev' }}
         run: |
           node -e "const fs=require('fs');fs.writeFileSync('src/config.json', JSON.stringify({api_url: process.env.API_URL, socket_url: process.env.SOCKET_URL}))"
@@ -89,3 +89,6 @@ jobs:
 
       - name: Protocol tests
         run: SOCKET_URL=http://127.0.0.1:8787 npm run test:protocol
+
+      - name: API tests
+        run: API_URL=http://127.0.0.1:8787 npm run test:api
