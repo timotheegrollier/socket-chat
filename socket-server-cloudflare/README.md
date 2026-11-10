@@ -16,6 +16,10 @@ a single **Durable Object** (`ChatRoom`) backed by its SQLite database.
 - Every other `/api/*` request is forwarded to the `tchat` Durable Object, where
   `src/api.ts` serves users, channels and messages on top of the DO's SQLite
   storage (`users`, `channels`, `messages` tables, created on demand).
+- Account settings use `Authorization: Bearer <JWT>`:
+  `GET /api/secure/me`, `PUT /api/secure/account` (pseudo) and
+  `PUT /api/secure/password` (current password + confirmation). The Worker
+  verifies the HS256 signature and the expiry before trusting the token.
 - `/socket.io/*` with `Upgrade: websocket` is forwarded to the same Durable
   Object, which keeps the socket state in memory.
 - Every other request is served from `../client/build` through the `ASSETS`
@@ -29,7 +33,7 @@ Non-secret variables in `wrangler.toml`:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `VERSION` | `2.2.9` | Returned by `/health` |
+| `VERSION` | `2.3.0` | Returned by `/health` |
 | `GITHUB_REPO_OWNER` | `timotheegrollier` | Repository that stores uploaded images |
 | `GITHUB_REPO_NAME` | `socket-chat` | Repository that stores uploaded images |
 | `GITHUB_BRANCH` | `images` | Dedicated branch that receives uploads (keeps `master` protected and avoids deploy runs per image) |

@@ -4,9 +4,14 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.2.9';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.3.0';
 
 const NEW_IN_V2 = [
+    {
+        icon: '🔐',
+        title: 'Account settings (2.3.0)',
+        text: 'Open the gear in the sidebar to change your username or password. Usernames stay unique regardless of case, password changes require your current password, and your past messages follow your new name.',
+    },
     {
         icon: '🗂️',
         title: 'Instant loading',
@@ -95,8 +100,9 @@ const NEW_IN_V2 = [
 ];
 
 const TECH = [
-    'React', 'Socket.IO', 'Node.js / Express', 'MongoDB', 'GitHub Pages',
-    'Cloudflare Workers + Durable Objects', 'Render', 'SCSS / Bootstrap', 'Continuous deployment',
+    'React', 'Socket.IO', 'TypeScript', 'Cloudflare Workers + Durable Objects',
+    'SQLite storage', 'GitHub Pages', 'GitHub Contents API', 'SCSS / Bootstrap',
+    'Continuous deployment',
 ];
 
 const ROADMAP = [
@@ -176,9 +182,12 @@ const About = () => {
                     <h2>Architecture</h2>
                     <p className="about-text">
                         The React build is hosted on <strong>GitHub Pages</strong>, while the realtime layer
-                        runs on <strong>Cloudflare Workers + Durable Objects</strong>: a single Durable Object
-                        keeps the socket state, avoiding the polling step entirely. The REST API
-                        (Node.js / Express + MongoDB) runs on Render and is redeployed automatically on each push.
+                        and the REST API run on <strong>Cloudflare Workers + Durable Objects</strong>: a
+                        single Durable Object keeps the socket state and stores users, channels and messages
+                        in its SQLite database, so no external database is needed. Uploaded images are
+                        committed to a dedicated branch of this repository through the GitHub Contents API;
+                        the token stays in a Worker secret. Everything is redeployed automatically on each
+                        push to <strong>master</strong>.
                     </p>
                     <div className="about-chips">
                         {TECH.map((tech) => (
@@ -204,7 +213,7 @@ const About = () => {
                         This project remains a training playground — the goal is to learn real-time
                         systems, cloud hosting and continuous delivery, one version at a time.
                     </p>
-                    <p className="about-footer-note">Socket Chat · v1 launched the chat · v2.0 made it a conversation · v2.1 added channels · v2.2 keeps it connected and identified.</p>
+                    <p className="about-footer-note">Socket Chat · v1 launched the chat · v2.0 made it a conversation · v2.1 added channels · v2.2 keeps it connected and identified · v2.3 adds account settings.</p>
                 </footer>
 
             </div>

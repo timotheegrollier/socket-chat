@@ -427,6 +427,27 @@
     }
 }
 
+.sidebar-account {
+    width: 28px;
+    height: 28px;
+    margin-left: auto;
+    padding: 0;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+
+    &:hover {
+        color: var(--accent-strong);
+        background: var(--accent-soft);
+        border-color: rgba(91, 124, 250, 0.25);
+    }
+}
+
 .sidebar-version {
     font-size: 10.5px;
     color: var(--muted);
@@ -1268,6 +1289,172 @@
     &:hover:not(:disabled) {
         background: #e24b56;
         box-shadow: 0 0 0 3px rgba(240, 97, 109, 0.25);
+    }
+}
+
+/* ---------- account settings dialog ---------- */
+
+.account-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: fade-in 0.15s ease;
+}
+
+.account-dialog {
+    width: 100%;
+    max-width: 680px;
+    max-height: min(88vh, 720px);
+    overflow: auto;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    animation: fade-in 0.18s ease;
+}
+
+.account-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--border);
+
+    h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--text);
+    }
+
+    p {
+        margin: 5px 0 0;
+        font-size: 12.5px;
+        line-height: 1.45;
+        color: var(--muted);
+    }
+}
+
+.account-close {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+
+    &:hover {
+        color: var(--text);
+        background: var(--surface-2);
+        border-color: var(--border);
+    }
+}
+
+.account-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.account-section {
+    padding: 20px 24px 24px;
+    min-width: 0;
+
+    & + & {
+        border-left: 1px solid var(--border);
+    }
+
+    h3 {
+        margin: 0 0 5px;
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+    }
+}
+
+.account-hint {
+    margin: 0 0 14px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+}
+
+.account-form {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+
+    .btn-accent {
+        height: 36px;
+        margin-top: 3px;
+        font-size: 13px;
+    }
+}
+
+.account-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: -4px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.account-reveal {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-strong);
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+@media screen and (max-width: 720px) {
+    .account-overlay {
+        padding: 12px;
+        align-items: flex-start;
+        padding-top: max(12px, env(safe-area-inset-top));
+    }
+
+    .account-dialog {
+        max-height: calc(100dvh - 24px);
+    }
+
+    .account-body {
+        grid-template-columns: 1fr;
+    }
+
+    .account-section {
+        padding: 18px 20px 20px;
+
+        & + & {
+            border-left: 0;
+            border-top: 1px solid var(--border);
+        }
     }
 }
 

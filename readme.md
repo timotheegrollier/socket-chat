@@ -4,16 +4,18 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.2.9** redesigns the desktop experience as a proper chat workspace:
-a framed app shell, a branded sidebar, a channel header with presence, and a
-centered message column that scrolls inside the window while the composer stays
-anchored at the bottom. It keeps the recent improvements: case-insensitive login
-with canonical display names, and Telegram-style PWA ergonomics on phones:
-full-screen chat, safe areas and keyboard-aware layout, a compact drawer/composer,
-and message bubbles. It also keeps the previous improvements: instant local
-loading with background revalidation, whole-message socket delivery, identified
-messages, typing indicator, unread notifications, multiple channels, resilient
-connections, and a pseudo that stays attached to every message.
+Version **2.3.0** adds account settings: change your username or password from
+the chat sidebar, with case-insensitive username uniqueness and current-password
+verification. It keeps version 2.2.9's desktop workspace: a framed app shell, a
+branded sidebar, a channel header with presence, and a centered message column
+that scrolls inside the window while the composer stays anchored at the bottom.
+It keeps the recent improvements: case-insensitive login with canonical display
+names, and Telegram-style PWA ergonomics on phones: full-screen chat, safe areas
+and keyboard-aware layout, a compact drawer/composer, and message bubbles. It
+also keeps the previous improvements: instant local loading with background
+revalidation, whole-message socket delivery, identified messages, typing
+indicator, unread notifications, multiple channels, resilient connections, and a
+pseudo that stays attached to every message.
 
 **Live:** https://timotheegrollier.github.io/socket-chat/
 
@@ -45,6 +47,7 @@ and the REST API both run on **Cloudflare Workers + Durable Objects**.
 | Toasts | Lightweight feedback for copy, delete, reset and reconnect events |
 | Input limits | 500 characters max, live counter, validated on client **and** server |
 | Auth | Signup / login with PBKDF2 + JWT (24 h), stored in `localStorage` |
+| Account settings | Edit the pseudo (4–12 characters, case-insensitive uniqueness) and change the password (current password required) from the sidebar |
 | Chat reset | `/delete` command clears all messages for every connected client |
 | Responsive layout | Dark, Discord/Linear-style shell: presence sidebar, channel column, sticky composer, mobile drawer |
 
@@ -247,7 +250,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.2.9", "timestamp": "..." }
+{ "status": "ok", "version": "2.3.0", "timestamp": "..." }
 ```
 
 ---
@@ -261,6 +264,9 @@ persists data in the SQLite database of the `ChatRoom` Durable Object.
 | --- | --- | --- |
 | `POST` | `/api/secure/signup` | Create an account (pseudo, password, confirmPass, terms) |
 | `POST` | `/api/secure/login` | Returns `{ userId, pseudo, token }` (JWT, 24 h) |
+| `GET` | `/api/secure/me` | Returns the authenticated user — requires `Authorization: Bearer <token>` |
+| `PUT` | `/api/secure/account` | Update the pseudo — `{ pseudo }`, Bearer token required. Case-insensitive uniqueness is enforced and past messages are re-attributed |
+| `PUT` | `/api/secure/password` | Change the password — `{ currentPassword, password, confirmPass }`, Bearer token required |
 | `GET` | `/api/secure/:id` | Returns the user (pseudo) |
 | `GET` | `/api/channels` | List channels (`general` is always present) |
 | `POST` | `/api/channels/new` | Create a channel — `{ name }` (1-24 lowercase letters, numbers or hyphens) |
@@ -298,8 +304,10 @@ The protocol suite covers the health endpoint, connection count, `newMsg`,
 `channelsChanged`, `channelDeleted`, `reset`, the presence list (`join` /
 `presence`), the typing indicator between two clients, and `stopTyping`. The API
 suite covers signup validation and duplicate detection, login, profiles,
-channels, message CRUD and authorization, CORS preflight, and the image-upload
-guard when no GitHub token is configured.
+channels, message CRUD and authorization, CORS preflight, JWT verification,
+username updates (validation, uniqueness, case-only rename, message
+re-attribution), password changes (wrong current password, confirmation,
+re-login) and the image-upload guard when no GitHub token is configured.
 
 ---
 
@@ -360,7 +368,7 @@ deploy workflows for every image.
 
 ## Versioning
 
-The current version is **2.2.9**. It is displayed on the About page and in the
+The current version is **2.3.0**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and
