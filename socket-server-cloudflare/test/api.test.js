@@ -43,7 +43,7 @@ async function main() {
   );
   console.log('preflight ok');
 
-  const pseudo = `ci${unique()}`;
+  let pseudo = `ci${unique()}`;
   const password = 'secret42';
 
   // Validation mirrors the old express-validator responses.
@@ -192,6 +192,206 @@ async function main() {
   );
   assert(messages.body.messages[0]._id === saved._id, 'messages content mismatch');
   console.log('get messages ok');
+
+  // ---------- account settings (authenticated) ----------
+  const bearer = { authorization: `Bearer ${login.body.token}` };
+  const jsonHeaders = { 'content-type': 'application/json' };
+
+  const me = await request('/api/secure/me', { headers: bearer });
+  assertStatus(me, 200, 'get me');
+  assert(me.body.user && me.body.user._id === userId, 'me payload mismatch');
+  assert(me.body.user.pseudo === pseudo, 'me pseudo mismatch');
+  console.log('get me ok');
+
+  const missingAuth = await request('/api/secure/me');
+  assertStatus(missingAuth, 401, 'missing auth');
+  console.log('missing auth ok');
+
+  const signatureStart = login.body.token.lastIndexOf('.') + 1;
+  const tamperedToken = login.body.token.slice(0, signatureStart) +
+    (login.body.token[signatureStart] === 'A' ? 'B' : 'A') +
+    login.body.token.slice(signatureStart + 1);
+  const tampered = await request('/api/secure/me', {
+    headers: { authorization: `Bearer ${tamperedToken}` },
+  });
+  assertStatus(tampered, 401, 'tampered token');
+  console.log('tampered token ok');
+
+  const unauthRename = await request('/api/secure/account', {
+    method: 'PUT',
+    headers: jsonHeaders,
+    body: JSON.stringify({ pseudo: 'renamed' }),
+  });
+  assertStatus(unauthRename, 401, 'unauthenticated rename');
+  console.log('unauthenticated rename ok');
+
+  const invalidRename = await request('/api/secure/account', {
+    method: 'PUT',
+    headers: { ...jsonHeaders, ...bearer },
+    body: JSON.stringify({ pseudo: 'ab' }),
+  });
+  assertStatus(invalidRename, 422, 'invalid pseudo');
+  assert(Array.isArray(invalidRename.body.errors), 'invalid pseudo errors missing');
+  console.log('invalid pseudo ok');
+
+  // A second account lets us check case-insensitive uniqueness while the
+  // rename endpoint ignores the caller's own current pseudo.
+  const otherPseudo = `ci${unique()}`;
+  const otherSignup = await request('/api/secure/signup', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({
+      pseudo: otherPseudo,
+      password,
+      confirmPass: password,
+      terms: true,
+    }),
+  });
+  assertStatus(otherSignup, 201, 'second signup');
+
+  const duplicateRename = await request('/api/secure/account', {
+    method: 'PUT',
+    headers: { ...jsonHeaders, ...bearer },
+    body: JSON.stringify({ pseudo: otherPseudo.toUpperCase() }),
+  });
+  assertStatus(duplicateRename, 400, 'duplicate pseudo');
+  assert(duplicateRename.body.error === 'Pseudo must be unique', 'duplicate pseudo error mismatch');
+  console.log('duplicate pseudo ok');
+
+  const oldPseudo = pseudo;
+  const renamed = `ci${unique()}`;
+  const rename = await request('/api/secure/account', {
+    method: 'PUT',
+    headers: { ...jsonHeaders, ...bearer },
+    body: JSON.stringify({ pseudo: renamed }),
+  });
+  assertStatus(rename, 200, 'rename account');
+  assert(rename.body.user && rename.body.user.pseudo === renamed, 'rename payload mismatch');
+  assert(rename.body.user._id === userId, 'rename changed the user id');
+  pseudo = renamed;
+  console.log('rename account ok');
+
+  const renamedProfile = await request(`/api/secure/${userId}`);
+  assertStatus(renamedProfile, 200, 'profile after rename');
+  assert(renamedProfile.body.user.pseudo === renamed, 'profile pseudo not updated');
+
+  // Past messages follow the account's new name.
+  const renamedMessages = await request(`/api/messages?channel=${channelName}`);
+  assertStatus(renamedMessages, 200, 'messages after rename');
+  assert(
+    renamedMessages.body.messages[0].author === renamed,
+    'past messages should use the new pseudo'
+  );
+  console.log('rename propagation ok');
+
+  const oldPseudoLogin = await request('/api/secure/login', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ pseudo: oldPseudo, password }),
+  });
+  assertStatus(oldPseudoLogin, 401, 'old pseudo login');
+
+  const renamedLogin = await request('/api/secure/login', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ pseudo: renamed, password }),
+  });
+  assertStatus(renamedLogin, 200, 'login after rename');
+  assert(renamedLogin.body.userId === userId, 'login after rename user id mismatch');
+
+  // Changing only the case is allowed for the account itself.
+  const caseRename = await request('/api/secure/account', {
+    method: 'PUT',
+    headers: { ...jsonHeaders, ...bearer },
+    body: JSON.stringify({ pseudo: renamed.toUpperCase() }),
+  });
+  assertStatus(caseRename, 200, 'case-only rename');
+  pseudo = renamed.toUpperCase();
+  assert(caseRename.body.user.pseudo === pseudo, 'case-only rename payload mismatch');
+  console.log('case-only rename ok');
+
+  const accountToken = renamedLogin.body.token;
+  const concatAuth = { ...jsonHeaders, authorization: `Bearer ${accountToken}` };
+
+  const unauthPassword = await request('/api/secure/password', {
+    method: 'PUT',
+    headers: jsonHeaders,
+    body: JSON.stringify({ currentPassword: password, password: 'newsecret42', confirmPass: 'newsecret42' }),
+  });
+  assertStatus(unauthPassword, 401, 'unauthenticated password change');
+  console.log('unauthenticated password change ok');
+
+  const wrongCurrent = await request('/api/secure/password', {
+    method: 'PUT',
+    headers: concatAuth,
+    body: JSON.stringify({
+      currentPassword: 'not-my-password',
+      password: 'newsecret42',
+      confirmPass: 'newsecret42',
+    }),
+  });
+  assertStatus(wrongCurrent, 400, 'wrong current password');
+  assert(
+    wrongCurrent.body.error === 'Current password is incorrect',
+    'wrong current password error mismatch'
+  );
+  console.log('wrong current password ok');
+
+  const passwordMismatch = await request('/api/secure/password', {
+    method: 'PUT',
+    headers: concatAuth,
+    body: JSON.stringify({
+      currentPassword: password,
+      password: 'newsecret42',
+      confirmPass: 'different42',
+    }),
+  });
+  assertStatus(passwordMismatch, 422, 'password confirmation mismatch');
+  console.log('password confirmation mismatch ok');
+
+  const shortPassword = await request('/api/secure/password', {
+    method: 'PUT',
+    headers: concatAuth,
+    body: JSON.stringify({ currentPassword: password, password: '1', confirmPass: '1' }),
+  });
+  assertStatus(shortPassword, 422, 'short new password');
+  console.log('short new password ok');
+
+  const changedPassword = 'newsecret42';
+  const passwordChange = await request('/api/secure/password', {
+    method: 'PUT',
+    headers: concatAuth,
+    body: JSON.stringify({
+      currentPassword: password,
+      password: changedPassword,
+      confirmPass: changedPassword,
+    }),
+  });
+  assertStatus(passwordChange, 200, 'change password');
+  assert(passwordChange.body.message === 'Password updated', 'change password message mismatch');
+  console.log('change password ok');
+
+  const stalePasswordLogin = await request('/api/secure/login', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ pseudo, password }),
+  });
+  assertStatus(stalePasswordLogin, 401, 'old password login');
+
+  const newPasswordLogin = await request('/api/secure/login', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ pseudo, password: changedPassword }),
+  });
+  assertStatus(newPasswordLogin, 200, 'login with new password');
+  assert(newPasswordLogin.body.userId === userId, 'new password login user id mismatch');
+
+  const meAfterPassword = await request('/api/secure/me', {
+    headers: { authorization: `Bearer ${newPasswordLogin.body.token}` },
+  });
+  assertStatus(meAfterPassword, 200, 'me after password change');
+  console.log('password change + re-login ok');
+  // ---------- end account settings ----------
 
   // Attachments must only reference our own storage.
   const remoteImage = await request('/api/messages/new', {

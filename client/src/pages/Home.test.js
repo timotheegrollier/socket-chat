@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import socketIOClient from 'socket.io-client';
@@ -170,6 +171,24 @@ test('ignores a cache saved for another account', async () => {
   expect(screen.queryByText('Not my conversation')).not.toBeInTheDocument();
   expect(screen.getByText(/connecting to socket chat/i)).toBeInTheDocument();
   await waitFor(() => expect(document.querySelector('.nav-username')).toHaveTextContent('tester'));
+});
+
+test('opens account settings from the sidebar', async () => {
+  axios.get.mockImplementation((url) => {
+    if (url.includes('/api/secure/')) return mockProfile();
+    if (url.includes('/api/channels')) {
+      return Promise.resolve({ data: { channels: [{ name: 'general', createdAt: null }] } });
+    }
+    return Promise.resolve({ data: { messages: [] } });
+  });
+
+  renderHome();
+  await waitFor(() => expect(document.querySelector('.nav-username')).toHaveTextContent('tester'));
+
+  userEvent.click(screen.getByRole('button', { name: /account settings/i }));
+
+  expect(await screen.findByRole('dialog', { name: /account settings/i })).toBeInTheDocument();
+  expect(screen.getByLabelText('Username')).toHaveValue('tester');
 });
 
 test('appends a complete newMsg payload without re-fetching messages', async () => {

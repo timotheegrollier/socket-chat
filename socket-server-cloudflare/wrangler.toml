@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2026-11-01"
 
 [vars]
-VERSION = "2.2.9"
+VERSION = "2.3.0"
 GITHUB_REPO_OWNER = "timotheegrollier"
 GITHUB_REPO_NAME = "socket-chat"
 GITHUB_BRANCH = "images"

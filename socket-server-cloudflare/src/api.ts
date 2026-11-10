@@ -24,6 +24,10 @@ const MAX_MESSAGE_LENGTH = 500;
 const MAX_AUTHOR_LENGTH = 12;
 const MAX_AUTHOR_ID_LENGTH = 64;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MIN_PSEUDO_LENGTH = 4;
+const MAX_PSEUDO_LENGTH = 12;
+const MIN_PASSWORD_LENGTH = 4;
+const MAX_PASSWORD_LENGTH = 20;
 const PBKDF2_ITERATIONS = 100_000;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
 
@@ -79,6 +83,12 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 
 const base64ToBytes = (value: string): Uint8Array =>
   Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+
+const base64UrlToBytes = (value: string): Uint8Array => {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return base64ToBytes(padded);
+};
 
 const base64Url = (value: string): string =>
   bytesToBase64(new TextEncoder().encode(value))
@@ -166,6 +176,80 @@ const signToken = async (userId: string, secret: string): Promise<string> => {
     .replace(/\//g, '_')
     .replace(/=+$/, '');
   return `${data}.${encoded}`;
+};
+
+const jwtSecret = (env: ApiEnv): string => env.JWT_SECRET || 'RANDOM_TOKEN_SECRET';
+
+const readBearerToken = (request: Request): string => {
+  const header = request.headers.get('Authorization') || '';
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  return match ? match[1].trim() : '';
+};
+
+// Verify the HS256 signature and the expiry before trusting the user id from a
+// token. Without this check any crafted token could impersonate an account.
+const verifyToken = async (token: string, secret: string): Promise<string | null> => {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [headerRaw, payloadRaw, signatureRaw] = parts;
+  if (!headerRaw || !payloadRaw || !signatureRaw) return null;
+
+  let header: { alg?: unknown };
+  let payload: { userId?: unknown; exp?: unknown };
+  let signature: Uint8Array;
+  try {
+    header = JSON.parse(new TextDecoder().decode(base64UrlToBytes(headerRaw)));
+    payload = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payloadRaw)));
+    signature = base64UrlToBytes(signatureRaw);
+  } catch {
+    return null;
+  }
+
+  if (!header || header.alg !== 'HS256') return null;
+
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const valid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      signature,
+      new TextEncoder().encode(`${headerRaw}.${payloadRaw}`)
+    );
+    if (!valid) return null;
+  } catch {
+    return null;
+  }
+
+  const exp = typeof payload.exp === 'number' ? payload.exp : 0;
+  if (exp <= Math.floor(Date.now() / 1000)) return null;
+
+  return typeof payload.userId === 'string' && payload.userId ? payload.userId : null;
+};
+
+type AuthResult = { user: UserRow } | { response: Response };
+
+const authenticate = async (
+  request: Request,
+  sql: SqlStorage,
+  env: ApiEnv
+): Promise<AuthResult> => {
+  const token = readBearerToken(request);
+  if (!token) return { response: json({ error: 'Authentication required' }, 401) };
+
+  const userId = await verifyToken(token, jwtSecret(env));
+  if (!userId) {
+    return { response: json({ error: 'Your session has expired. Please log in again.' }, 401) };
+  }
+
+  const user = findUserById(sql, userId);
+  if (!user) return { response: json({ error: 'Account not found' }, 401) };
+  return { user };
 };
 
 // ---------- SQLite storage (inside the Durable Object) ----------
@@ -265,10 +349,10 @@ const validateSignup = (body: Record<string, unknown>): { msg: string }[] => {
   const errors: { msg: string }[] = [];
   const pseudo = normalizePseudo(body.pseudo);
   const password = typeof body.password === 'string' ? body.password : '';
-  if (pseudo.length < 4 || pseudo.length > 12) {
+  if (pseudo.length < MIN_PSEUDO_LENGTH || pseudo.length > MAX_PSEUDO_LENGTH) {
     errors.push({ msg: 'Pseudo must be at least 4 characters and 12 max' });
   }
-  if (password.length < 4 || password.length > 20) {
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
     errors.push({ msg: 'Password be at least 4 characters' });
   }
   return errors;
@@ -325,8 +409,99 @@ const handleLogin = async (
   if (!user) return invalid;
   const valid = await verifyPassword(password, user.password);
   if (!valid) return invalid;
-  const token = await signToken(user.id, env.JWT_SECRET || 'RANDOM_TOKEN_SECRET');
+  const token = await signToken(user.id, jwtSecret(env));
   return json({ userId: user.id, pseudo: user.pseudo, token });
+};
+
+// The JWT only carries the user id, so a pseudo change does not invalidate the
+// session. Old messages are re-attributed to the new pseudo so the whole
+// conversation keeps a consistent author name.
+const handleUpdateAccount = async (
+  request: Request,
+  sql: SqlStorage,
+  env: ApiEnv
+): Promise<Response> => {
+  const auth = await authenticate(request, sql, env);
+  if ('response' in auth) return auth.response;
+  const { user } = auth;
+
+  const body = await readJson(request);
+  const pseudo = normalizePseudo(body.pseudo);
+  if (pseudo.length < MIN_PSEUDO_LENGTH || pseudo.length > MAX_PSEUDO_LENGTH) {
+    return json(
+      { errors: [{ msg: 'Pseudo must be at least 4 characters and 12 max' }] },
+      422
+    );
+  }
+
+  const existing = findUserByPseudo(sql, pseudo);
+  if (existing && existing.id !== user.id) {
+    return json({ error: 'Pseudo must be unique' }, 400);
+  }
+
+  if (pseudo !== user.pseudo) {
+    try {
+      sql.exec(
+        'UPDATE users SET pseudo = ?, pseudo_lower = ? WHERE id = ?',
+        pseudo,
+        pseudo.toLowerCase(),
+        user.id
+      );
+    } catch {
+      // Unique index racing with a concurrent signup or rename.
+      return json({ error: 'Pseudo must be unique' }, 400);
+    }
+    sql.exec('UPDATE messages SET author = ? WHERE author_id = ?', pseudo, user.id);
+  }
+
+  const updated = findUserById(sql, user.id) ?? { ...user, pseudo };
+  return json({ user: toUser(updated) });
+};
+
+const handleChangePassword = async (
+  request: Request,
+  sql: SqlStorage,
+  env: ApiEnv
+): Promise<Response> => {
+  const auth = await authenticate(request, sql, env);
+  if ('response' in auth) return auth.response;
+  const { user } = auth;
+
+  const body = await readJson(request);
+  const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+  const confirmPass = typeof body.confirmPass === 'string' ? body.confirmPass : '';
+
+  const errors: { msg: string }[] = [];
+  if (!currentPassword) {
+    errors.push({ msg: 'Current password is required' });
+  }
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    errors.push({ msg: 'Password must be between 4 and 20 characters' });
+  }
+  if (errors.length > 0) return json({ errors }, 422);
+
+  if (password !== confirmPass) {
+    return json({ errors: [{ msg: "Passwords don't match" }] }, 422);
+  }
+
+  if (!(await verifyPassword(currentPassword, user.password))) {
+    return json({ error: 'Current password is incorrect' }, 400);
+  }
+
+  const passwordHash = await hashPassword(password);
+  sql.exec('UPDATE users SET password = ? WHERE id = ?', passwordHash, user.id);
+  return json({ message: 'Password updated' });
+};
+
+const handleGetMe = async (
+  request: Request,
+  sql: SqlStorage,
+  env: ApiEnv
+): Promise<Response> => {
+  const auth = await authenticate(request, sql, env);
+  if ('response' in auth) return auth.response;
+  return json({ user: toUser(auth.user) });
 };
 
 const handleGetChannels = (sql: SqlStorage): Response => {
@@ -591,6 +766,15 @@ export const handleApi = async (
   }
   if (path === '/api/secure/login' && method === 'POST') {
     return handleLogin(request, sqlStorage, env);
+  }
+  if (path === '/api/secure/me' && method === 'GET') {
+    return handleGetMe(request, sqlStorage, env);
+  }
+  if (path === '/api/secure/account' && method === 'PUT') {
+    return handleUpdateAccount(request, sqlStorage, env);
+  }
+  if (path === '/api/secure/password' && method === 'PUT') {
+    return handleChangePassword(request, sqlStorage, env);
   }
   if (path === '/api/secure/reset' && method === 'DELETE') {
     sqlStorage.exec('DELETE FROM users');
