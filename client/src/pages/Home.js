@@ -7,10 +7,10 @@ import Login from "../components/Login";
 import AccountDialog from "../components/AccountDialog";
 import { Link } from "react-router-dom";
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.3.0';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.4.0';
 const USERNAME_KEY = 'socket-chat-username';
 const EMOJIS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '❤️', '🤔', '😅', '🙏', '🚀', '💯'];
-const MAX_MESSAGE_LENGTH = 500;
+const MAX_REALTIME_MESSAGE_CHARS = 64000;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const AVATAR_PALETTE = ['#5b7cfa', '#7a6ff0', '#4f9cf9', '#43b3a8', '#d7746b', '#c98a4b', '#8f7ec9', '#5fa06f'];
 const RECONNECT_DELAY_MS = 500;
@@ -1186,7 +1186,7 @@ const Home = () => {
             return
         }
 
-        const text = value.slice(0, MAX_MESSAGE_LENGTH)
+        const text = value
         const channel = activeChannelRef.current || 'general'
         const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
         const localPreview = imagePreview || ''
@@ -1285,7 +1285,13 @@ const Home = () => {
                 }
                 setSending(false)
                 if (socketRef.current) {
-                    socketRef.current.emit("newMsg", saved && saved._id
+                    // Keep realtime frames well below the WebSocket payload
+                    // limit. Very long messages are fetched by recipients
+                    // instead of being duplicated over the socket.
+                    const canSendWholeMessage = saved && saved._id &&
+                        typeof saved.message === 'string' && saved.message &&
+                        saved.message.length <= MAX_REALTIME_MESSAGE_CHARS
+                    socketRef.current.emit("newMsg", canSendWholeMessage
                         ? { channel, message: saved }
                         : { channel })
                 }
@@ -2002,7 +2008,6 @@ const Home = () => {
                                         id="message"
                                         ref={inputRef}
                                         rows={1}
-                                        maxLength={MAX_MESSAGE_LENGTH}
                                         placeholder={`Message #${activeChannel}`}
                                         onChange={checkMessage}
                                         onKeyDown={handleKeyDown}
@@ -2028,9 +2033,7 @@ const Home = () => {
                                 </div>
 
                                 <div className="composer-meta">
-                                    <span className={charCount > MAX_MESSAGE_LENGTH - 50 ? 'warn' : ''}>
-                                        {charCount}/{MAX_MESSAGE_LENGTH}
-                                    </span>
+                                    <span>{charCount} {charCount === 1 ? 'character' : 'characters'}</span>
                                     <span className="composer-hint">Enter to send · Shift+Enter for a new line</span>
                                 </div>
                             </form>

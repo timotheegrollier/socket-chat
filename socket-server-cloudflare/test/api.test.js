@@ -430,6 +430,42 @@ async function main() {
   assert(deleteChannel.body.name === channelName, 'delete channel payload mismatch');
   console.log('delete channel ok');
 
+  // Messages are no longer capped at 500 characters: the full text must be
+  // stored and returned unchanged.
+  const longChannelName = `ci-${unique()}`;
+  const longChannel = await request('/api/channels/new', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: longChannelName }),
+  });
+  assertStatus(longChannel, 201, 'long message channel');
+
+  const longText = 'a'.repeat(5000);
+  const longMessage = await request('/api/messages/new', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      message: longText,
+      authorId: userId,
+      channel: longChannelName,
+    }),
+  });
+  assertStatus(longMessage, 200, 'long message');
+  assert(longMessage.body.msg.message.length === longText.length, 'long message truncated');
+
+  const longMessages = await request(`/api/messages?channel=${longChannelName}`);
+  assertStatus(longMessages, 200, 'long messages');
+  assert(
+    longMessages.body.messages[0].message === longText,
+    'long message not stored unchanged'
+  );
+  console.log('long message ok');
+
+  const deleteLongChannel = await request(`/api/channels/${longChannelName}`, {
+    method: 'DELETE',
+  });
+  assertStatus(deleteLongChannel, 200, 'delete long message channel');
+
   // Images need the GITHUB_TOKEN worker secret; without it the API reports 503
   // instead of crashing. CI runs the worker without secrets.
   const image = await request('/api/images', { method: 'POST' });

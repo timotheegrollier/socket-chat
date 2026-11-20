@@ -94,6 +94,22 @@ async function main() {
   }
   console.log('newMsg ok');
 
+  const longText = 'x'.repeat(8000);
+  const longMsgPromise = waitFor(alice, 'newMsg');
+  alice.emit('newMsg', {
+    channel: 'general',
+    message: {
+      ...savedMessage,
+      _id: '64b7f0000000000000000003',
+      message: longText,
+    },
+  });
+  const [longMsg] = await longMsgPromise;
+  if (!longMsg || !longMsg.message || longMsg.message.message !== longText) {
+    throw new Error('long newMsg was truncated');
+  }
+  console.log('long newMsg ok');
+
   const legacyMsgPromise = waitFor(alice, 'newMsg');
   alice.emit('newMsg', {
     channel: 'general',

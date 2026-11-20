@@ -4,7 +4,7 @@ import Nav from '../components/Nav';
 import axios from 'axios';
 import config from '../config.json';
 
-const APP_VERSION = process.env.REACT_APP_VERSION || '2.3.0';
+const APP_VERSION = process.env.REACT_APP_VERSION || '2.4.0';
 
 const NEW_IN_V2 = [
     {
@@ -89,8 +89,8 @@ const NEW_IN_V2 = [
     },
     {
         icon: '📏',
-        title: 'Input limits',
-        text: 'Messages are capped (500 characters) with a live counter, validated on the client and on the server.',
+        title: 'No message limit (2.4.0)',
+        text: 'The 500-character cap is gone: write as much as you need. The composer grows with your text, and very long messages still reach everyone reliably.',
     },
     {
         icon: '☁️',

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
@@ -189,6 +189,45 @@ test('opens account settings from the sidebar', async () => {
 
   expect(await screen.findByRole('dialog', { name: /account settings/i })).toBeInTheDocument();
   expect(screen.getByLabelText('Username')).toHaveValue('tester');
+});
+
+test('sends messages longer than 500 characters without truncation', async () => {
+  axios.get.mockImplementation((url) => {
+    if (url.includes('/api/secure/')) return mockProfile();
+    if (url.includes('/api/channels')) {
+      return Promise.resolve({ data: { channels: [{ name: 'general', createdAt: null }] } });
+    }
+    return Promise.resolve({ data: { messages: [] } });
+  });
+  const longText = 'a'.repeat(600);
+  axios.post.mockResolvedValue({
+    data: {
+      msg: {
+        _id: 'long-1',
+        message: longText,
+        author: 'tester',
+        authorId: 'user-1',
+        channel: 'general',
+        createdAt: new Date().toISOString(),
+      },
+    },
+  });
+
+  renderHome();
+  await waitFor(() => expect(document.querySelector('.nav-username')).toHaveTextContent('tester'));
+
+  const textarea = document.getElementById('message');
+  expect(textarea.getAttribute('maxlength')).toBeNull();
+
+  fireEvent.change(textarea, { target: { value: longText } });
+  expect(textarea).toHaveValue(longText);
+  expect(screen.getByText('600 characters')).toBeInTheDocument();
+
+  fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', charCode: 13 });
+
+  await waitFor(() => expect(axios.post).toHaveBeenCalled());
+  const [, payload] = axios.post.mock.calls[0];
+  expect(payload.message).toBe(longText);
 });
 
 test('appends a complete newMsg payload without re-fetching messages', async () => {
