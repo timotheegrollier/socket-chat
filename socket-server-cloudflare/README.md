@@ -33,7 +33,7 @@ Non-secret variables in `wrangler.toml`:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `VERSION` | `2.3.0` | Returned by `/health` |
+| `VERSION` | `2.4.0` | Returned by `/health` |
 | `GITHUB_REPO_OWNER` | `timotheegrollier` | Repository that stores uploaded images |
 | `GITHUB_REPO_NAME` | `socket-chat` | Repository that stores uploaded images |
 | `GITHUB_BRANCH` | `images` | Dedicated branch that receives uploads (keeps `master` protected and avoids deploy runs per image) |

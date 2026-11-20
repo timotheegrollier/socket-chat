@@ -40,7 +40,6 @@ const PING_INTERVAL_MS = 25_000;
 const PING_TIMEOUT_MS = 60_000;
 const MAX_ROOM_LENGTH = 64;
 const MAX_NAME_LENGTH = 64;
-const MAX_MESSAGE_LENGTH = 500;
 const MAX_AUTHOR_LENGTH = 12;
 const MAX_ID_LENGTH = 64;
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
@@ -79,7 +78,7 @@ const readMessage = (payload: unknown, fallbackChannel: string): ChatMessagePayl
   if (typeof data._id !== 'string' || typeof data.message !== 'string') return null;
 
   const id = data._id.trim().slice(0, MAX_ID_LENGTH);
-  const message = data.message.trim().slice(0, MAX_MESSAGE_LENGTH);
+  const message = data.message.trim();
   const channel = readChannel(data) || fallbackChannel;
   if (!id || !message || !channel) return null;
 

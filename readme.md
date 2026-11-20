@@ -4,18 +4,20 @@
 [![Deploy](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml/badge.svg)](https://github.com/timotheegrollier/socket-chat/actions/workflows/deploy.yml)
 
 A real-time chat application built as a learning project around WebSockets.
-Version **2.3.0** adds account settings: change your username or password from
+Version **2.4.0** removes the 500-character message cap: write as much as you
+need, with a live character count and reliable delivery for very long messages.
+It keeps version 2.3.0's account settings: change your username or password from
 the chat sidebar, with case-insensitive username uniqueness and current-password
-verification. It keeps version 2.2.9's desktop workspace: a framed app shell, a
-branded sidebar, a channel header with presence, and a centered message column
-that scrolls inside the window while the composer stays anchored at the bottom.
-It keeps the recent improvements: case-insensitive login with canonical display
-names, and Telegram-style PWA ergonomics on phones: full-screen chat, safe areas
-and keyboard-aware layout, a compact drawer/composer, and message bubbles. It
-also keeps the previous improvements: instant local loading with background
-revalidation, whole-message socket delivery, identified messages, typing
-indicator, unread notifications, multiple channels, resilient connections, and a
-pseudo that stays attached to every message.
+verification. It also keeps version 2.2.9's desktop workspace: a framed app
+shell, a branded sidebar, a channel header with presence, and a centered message
+column that scrolls inside the window while the composer stays anchored at the
+bottom. It keeps the recent improvements: case-insensitive login with canonical
+display names, and Telegram-style PWA ergonomics on phones: full-screen chat,
+safe areas and keyboard-aware layout, a compact drawer/composer, and message
+bubbles. It also keeps the previous improvements: instant local loading with
+background revalidation, whole-message socket delivery, identified messages,
+typing indicator, unread notifications, multiple channels, resilient
+connections, and a pseudo that stays attached to every message.
 
 **Live:** https://timotheegrollier.github.io/socket-chat/
 
@@ -45,7 +47,7 @@ and the REST API both run on **Cloudflare Workers + Durable Objects**.
 | Multi-line composer | Auto-growing textarea — Enter sends, Shift+Enter adds a new line |
 | Emoji picker | Quick reactions appended to the composer |
 | Toasts | Lightweight feedback for copy, delete, reset and reconnect events |
-| Input limits | 500 characters max, live counter, validated on client **and** server |
+| Long messages | No character cap; the composer grows with the text and very large messages use a lightweight refresh instead of a huge realtime payload |
 | Auth | Signup / login with PBKDF2 + JWT (24 h), stored in `localStorage` |
 | Account settings | Edit the pseudo (4–12 characters, case-insensitive uniqueness) and change the password (current password required) from the sidebar |
 | Chat reset | `/delete` command clears all messages for every connected client |
@@ -250,7 +252,7 @@ active channel, so messages sent while the page was frozen are not lost.
 `GET /health` returns:
 
 ```json
-{ "status": "ok", "version": "2.3.0", "timestamp": "..." }
+{ "status": "ok", "version": "2.4.0", "timestamp": "..." }
 ```
 
 ---
@@ -368,7 +370,7 @@ deploy workflows for every image.
 
 ## Versioning
 
-The current version is **2.3.0**. It is displayed on the About page and in the
+The current version is **2.4.0**. It is displayed on the About page and in the
 chat header. When bumping the version:
 
 1. Update the version in `package.json`, `client/package.json` and

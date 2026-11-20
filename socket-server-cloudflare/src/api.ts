@@ -20,7 +20,6 @@ export interface ApiEnv {
 const DEFAULT_CHANNEL = 'general';
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
 const OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i;
-const MAX_MESSAGE_LENGTH = 500;
 const MAX_AUTHOR_LENGTH = 12;
 const MAX_AUTHOR_ID_LENGTH = 64;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -559,7 +558,7 @@ const handleGetMessages = (url: URL, sql: SqlStorage): Response => {
 
 const handleNewMessage = async (request: Request, sql: SqlStorage): Promise<Response> => {
   const body = await readJson(request);
-  const message = typeof body.message === 'string' ? body.message.trim().slice(0, MAX_MESSAGE_LENGTH) : '';
+  const message = typeof body.message === 'string' ? body.message.trim() : '';
   const rawImageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim().slice(0, 1000) : '';
   const imageUrl = rawImageUrl && isAllowedImageUrl(rawImageUrl) ? rawImageUrl : '';
 
